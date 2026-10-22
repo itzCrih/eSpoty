@@ -21,9 +21,9 @@ import java.util.List;
 
 /**
  * Renders pure celestial lyrics directly in the 3D Minecraft sky along the horizon.
- * Features depth-tested occlusion (terrain, blocks, entities, and players occlude the text),
- * high-resolution modern typography, vertical scrolling ribbon with the synchronized line
- * centered, native drop shadow, and non-depth-writing starlight glow with zero z-fighting.
+ * Features strict depth-tested occlusion (terrain, blocks, entities, and players occlude ALL text & glow),
+ * customizable user scale and line length, high-resolution vector typography, vertical scrolling
+ * ribbon with the synchronized line centered, rich starlight glow, and deep drop shadow.
  */
 public class SkyLyricsRenderer {
 
@@ -105,8 +105,9 @@ public class SkyLyricsRenderer {
         poseStack.translate(targetDx, targetDy, targetDz);
         poseStack.mulPose(camera.rotation());
 
-        // Billboard text scale (Compact, refined typography)
-        float baseScale = 0.20f;
+        // Customizable billboard text scale (User setting: 50% to 200%)
+        float userScale = config.getSkyLyricsScale();
+        float baseScale = 0.20f * userScale;
         poseStack.scale(baseScale, -baseScale, baseScale);
 
         LyricsManager lyricsMgr = LyricsManager.getInstance();
@@ -127,6 +128,11 @@ public class SkyLyricsRenderer {
                 smoothScrollY += (targetScrollY - smoothScrollY) * 0.12;
             }
 
+            // User setting for visible lyrics length / number of lines
+            int maxTotalLines = config.getSkyLyricsLength();
+            int maxAboveBelow = Math.max(1, (maxTotalLines - 1) / 2);
+            float maxDist = (maxAboveBelow + 0.6f) * lineSpacing;
+
             int count = lines.size();
             for (int i = 0; i < count; i++) {
                 String rawText = lines.get(i).getText().trim().toUpperCase();
@@ -135,15 +141,14 @@ public class SkyLyricsRenderer {
                 float relY = (float) (i * lineSpacing - smoothScrollY);
                 float distFromCenter = Math.abs(relY);
 
-                // Show active line + 2 lines above + 2 lines below (max 38 font units)
-                if (distFromCenter > 38.0f) continue;
+                int deltaIdx = Math.abs(i - activeIdx);
+                if (deltaIdx > maxAboveBelow) continue;
 
-                float alpha = Math.max(0.0f, 1.0f - (distFromCenter / 36.0f));
+                float alpha = Math.max(0.0f, 1.0f - (distFromCenter / maxDist));
                 alpha = alpha * alpha; // Smooth quadratic falloff
                 if (alpha < 0.05f) continue;
 
                 boolean isActive = (i == activeIdx);
-                int deltaIdx = Math.abs(i - activeIdx);
 
                 float lineScale = isActive ? 1.18f : (deltaIdx == 1 ? 0.90f : 0.80f);
 
@@ -152,23 +157,27 @@ public class SkyLyricsRenderer {
 
                 int coreColor;
                 int glowColor;
+                int shadowColor;
 
                 if (isActive) {
                     coreColor = applyAlpha(0xFFFFFFFF, alpha);
-                    glowColor = applyAlpha(0x40E0F0FF, alpha);
+                    glowColor = applyAlpha(0x80D0F0FF, alpha);
+                    shadowColor = applyAlpha(0xD0000000, alpha);
                 } else if (deltaIdx == 1) {
-                    coreColor = applyAlpha(0xD0FFFFFF, alpha * 0.70f);
+                    coreColor = applyAlpha(0xD0FFFFFF, alpha * 0.75f);
                     glowColor = 0;
+                    shadowColor = applyAlpha(0x90000000, alpha * 0.60f);
                 } else {
-                    coreColor = applyAlpha(0x88E2E8F0, alpha * 0.40f);
+                    coreColor = applyAlpha(0x88E2E8F0, alpha * 0.45f);
                     glowColor = 0;
+                    shadowColor = applyAlpha(0x60000000, alpha * 0.40f);
                 }
 
                 poseStack.pushPose();
                 poseStack.translate(0.0f, relY, 0.0f);
                 poseStack.scale(lineScale, lineScale, lineScale);
 
-                drawModernGlowText(font, comp, -halfW, -4.0f, coreColor, glowColor, isActive, poseStack.last().pose(), bufferSource);
+                drawModernGlowText(font, comp, -halfW, -4.0f, coreColor, glowColor, shadowColor, isActive, poseStack, bufferSource);
 
                 poseStack.popPose();
             }
@@ -179,7 +188,7 @@ public class SkyLyricsRenderer {
             float halfW = font.width(comp) / 2.0f;
             poseStack.pushPose();
             poseStack.scale(1.18f, 1.18f, 1.18f);
-            drawModernGlowText(font, comp, -halfW, -4.0f, 0xFFFFFFFF, 0x40E0F0FF, true, poseStack.last().pose(), bufferSource);
+            drawModernGlowText(font, comp, -halfW, -4.0f, 0xFFFFFFFF, 0x80D0F0FF, 0xD0000000, true, poseStack, bufferSource);
             poseStack.popPose();
         }
 
@@ -196,20 +205,46 @@ public class SkyLyricsRenderer {
             float y,
             int coreColor,
             int glowColor,
+            int shadowColor,
             boolean isActive,
-            Matrix4f matrix,
+            PoseStack poseStack,
             MultiBufferSource bufferSource
     ) {
-        // 1. Soft elegant starlight glow aura for active line (SEE_THROUGH: zero depth-buffer writing, completely eliminates z-fighting)
-        if (isActive && glowColor != 0) {
-            font.drawInBatch(comp, x - 1.0f, y, glowColor, false, matrix, bufferSource, Font.DisplayMode.SEE_THROUGH, 0, 0xF000F0);
-            font.drawInBatch(comp, x + 1.0f, y, glowColor, false, matrix, bufferSource, Font.DisplayMode.SEE_THROUGH, 0, 0xF000F0);
-            font.drawInBatch(comp, x, y - 1.0f, glowColor, false, matrix, bufferSource, Font.DisplayMode.SEE_THROUGH, 0, 0xF000F0);
-            font.drawInBatch(comp, x, y + 1.0f, glowColor, false, matrix, bufferSource, Font.DisplayMode.SEE_THROUGH, 0, 0xF000F0);
+        // 1. Deep solid drop shadow (Z = -0.04f behind, depth-tested: NEVER crosses blocks)
+        if (shadowColor != 0) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, -0.04f);
+            font.drawInBatch(comp, x + 1.2f, y + 1.2f, shadowColor, false, poseStack.last().pose(), bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            poseStack.popPose();
         }
 
-        // 2. Crisp radiant core text with native Minecraft drop shadow (NORMAL: depth-tested against terrain & players, zero flicker)
-        font.drawInBatch(comp, x, y, coreColor, true, matrix, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+        // 2. Radiant starlight glow aura for active line (Z = -0.01f, depth-tested: NEVER crosses blocks)
+        if (isActive && glowColor != 0) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, -0.01f);
+            Matrix4f glowMat = poseStack.last().pose();
+
+            // Outer diffuse starlight aura (4 diagonal points at 1.5px)
+            int outer = applyAlpha(glowColor, 0.50f);
+            font.drawInBatch(comp, x - 1.5f, y - 1.5f, outer, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x + 1.5f, y - 1.5f, outer, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x - 1.5f, y + 1.5f, outer, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x + 1.5f, y + 1.5f, outer, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+
+            // Inner bright bloom halo (4 cardinal points at 0.8px)
+            font.drawInBatch(comp, x - 0.8f, y, glowColor, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x + 0.8f, y, glowColor, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x, y - 0.8f, glowColor, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            font.drawInBatch(comp, x, y + 0.8f, glowColor, false, glowMat, bufferSource, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+
+            poseStack.popPose();
+        }
+
+        // 3. Crisp radiant core text (Z = +0.03f in front, with POLYGON_OFFSET to prevent Z-fighting)
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, 0.03f);
+        font.drawInBatch(comp, x, y, coreColor, false, poseStack.last().pose(), bufferSource, Font.DisplayMode.POLYGON_OFFSET, 0, 0xF000F0);
+        poseStack.popPose();
     }
 
     private static int applyAlpha(int argb, float alpha) {

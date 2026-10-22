@@ -48,6 +48,8 @@ public class ModConfig {
     private boolean hudAutoHide = false;
     private int hudAutoHideSeconds = 8;
     private boolean skyLyricsEnabled = true;
+    private float skyLyricsScale = 1.0f;
+    private int skyLyricsLength = 5;
     private float hudScale = 1.0f;
     private float hudOpacity = 0.85f;
     private String customClientId = "";
@@ -188,6 +190,32 @@ public class ModConfig {
 
     public void setSkyLyricsEnabled(boolean skyLyricsEnabled) {
         this.skyLyricsEnabled = skyLyricsEnabled;
+        save();
+    }
+
+    public float getSkyLyricsScale() {
+        return Math.max(0.5f, Math.min(2.0f, skyLyricsScale));
+    }
+
+    public void setSkyLyricsScale(float scale) {
+        this.skyLyricsScale = Math.max(0.5f, Math.min(2.0f, scale));
+        save();
+    }
+
+    public int getSkyLyricsScalePercent() {
+        return Math.round(getSkyLyricsScale() * 100.0f);
+    }
+
+    public void setSkyLyricsScalePercent(int percent) {
+        setSkyLyricsScale(Math.max(50, Math.min(200, percent)) / 100.0f);
+    }
+
+    public int getSkyLyricsLength() {
+        return Math.max(3, Math.min(15, skyLyricsLength));
+    }
+
+    public void setSkyLyricsLength(int length) {
+        this.skyLyricsLength = Math.max(3, Math.min(15, length));
         save();
     }
 

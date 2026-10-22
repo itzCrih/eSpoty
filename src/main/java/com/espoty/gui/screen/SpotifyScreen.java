@@ -39,7 +39,7 @@ public class SpotifyScreen extends Screen {
     private int modalX;
     private int modalY;
     private int modalWidth = 390;
-    private int modalHeight = 285;
+    private int modalHeight = 315;
 
     // Interactive controls state
     private boolean isDraggingSeek = false;
@@ -50,6 +50,10 @@ public class SpotifyScreen extends Screen {
     private float dragHudOpacityRatio = 0.85f;
     private boolean isDraggingHudScale = false;
     private float dragHudScaleRatio = 0.5f;
+    private boolean isDraggingSkyScale = false;
+    private float dragSkyScaleRatio = 0.333f;
+    private boolean isDraggingSkyLines = false;
+    private float dragSkyLinesRatio = 0.166f;
 
     // Closing & Tab Animation States
     private boolean isClosing = false;
@@ -76,7 +80,7 @@ public class SpotifyScreen extends Screen {
         this.isClosing = false;
         this.tabChangeTime = System.currentTimeMillis();
         this.modalWidth = Math.min(390, this.width - 20);
-        this.modalHeight = Math.min(285, this.height - 20);
+        this.modalHeight = Math.min(315, this.height - 20);
         this.modalX = (this.width - this.modalWidth) / 2;
         this.modalY = (this.height - this.modalHeight) / 2;
 
@@ -647,37 +651,71 @@ public class SpotifyScreen extends Screen {
         boolean skyHover = isMouseOver(mouseX, mouseY, posBtnX, row5Y, btnW, btnH);
         renderSettingsToggle(guiGraphics, config.isSkyLyricsEnabled(), posBtnX, row5Y, btnW, btnH, skyHover);
 
-        // 6. Compact HUD Toggle (Row 6)
+        // 6. Sky Lyrics Scale Slider (Row 6: 50% to 200%)
         int row6Y = contentY + 95;
-        guiGraphics.drawString(this.font, "Compact HUD:", contentX, row6Y + 4, 0xFFFFD700, true);
-        boolean compactHover = isMouseOver(mouseX, mouseY, posBtnX, row6Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isHudCompact(), posBtnX, row6Y, btnW, btnH, compactHover);
+        guiGraphics.drawString(this.font, "Sky Lyrics Scale:", contentX, row6Y + 4, 0xFFFFD700, true);
+        int skyScalePercent = isDraggingSkyScale ? Math.round(50 + dragSkyScaleRatio * 150) : config.getSkyLyricsScalePercent();
 
-        // 7. Auto-Hide HUD Toggle (Row 7)
+        // Sky Scale Track
+        guiGraphics.fill(posBtnX, row6Y + 6, posBtnX + btnW, row6Y + 10, 0x35FFFFFF);
+        float skyScaleRatio = (skyScalePercent - 50) / 150.0f;
+        int skyScaleFillW = (int) (btnW * Math.max(0f, Math.min(1f, skyScaleRatio)));
+        if (skyScaleFillW > 0) {
+            guiGraphics.fillGradient(posBtnX, row6Y + 6, posBtnX + skyScaleFillW, row6Y + 10, 0xFFFFD700, 0xFFFFF176);
+        }
+        int skyScaleKnobX = posBtnX + skyScaleFillW;
+        guiGraphics.fill(skyScaleKnobX - 2, row6Y + 4, skyScaleKnobX + 3, row6Y + 12, 0xFFFFD700);
+        guiGraphics.fill(skyScaleKnobX - 1, row6Y + 5, skyScaleKnobX + 2, row6Y + 11, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, skyScalePercent + "%", posBtnX + btnW + 6, row6Y + 4, 0xFFAAAAAA, true);
+
+        // 7. Sky Lyrics Lines Slider (Row 7: 3 to 15 lines)
         int row7Y = contentY + 114;
-        guiGraphics.drawString(this.font, "Auto-Hide HUD:", contentX, row7Y + 4, 0xFFFFD700, true);
-        boolean autoHideHover = isMouseOver(mouseX, mouseY, posBtnX, row7Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isHudAutoHide(), posBtnX, row7Y, btnW, btnH, autoHideHover);
+        guiGraphics.drawString(this.font, "Sky Lyrics Lines:", contentX, row7Y + 4, 0xFFFFD700, true);
+        int skyLines = isDraggingSkyLines ? Math.round(3 + dragSkyLinesRatio * 12) : config.getSkyLyricsLength();
 
-        // 8. MC Sound Ducking & Music Mute (Row 8)
+        // Sky Lines Track
+        guiGraphics.fill(posBtnX, row7Y + 6, posBtnX + btnW, row7Y + 10, 0x35FFFFFF);
+        float skyLinesRatio = (skyLines - 3) / 12.0f;
+        int skyLinesFillW = (int) (btnW * Math.max(0f, Math.min(1f, skyLinesRatio)));
+        if (skyLinesFillW > 0) {
+            guiGraphics.fillGradient(posBtnX, row7Y + 6, posBtnX + skyLinesFillW, row7Y + 10, 0xFFFFD700, 0xFFFFF176);
+        }
+        int skyLinesKnobX = posBtnX + skyLinesFillW;
+        guiGraphics.fill(skyLinesKnobX - 2, row7Y + 4, skyLinesKnobX + 3, row7Y + 12, 0xFFFFD700);
+        guiGraphics.fill(skyLinesKnobX - 1, row7Y + 5, skyLinesKnobX + 2, row7Y + 11, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, skyLines + " lines", posBtnX + btnW + 6, row7Y + 4, 0xFFAAAAAA, true);
+
+        // 8. Compact HUD Toggle (Row 8)
         int row8Y = contentY + 133;
-        guiGraphics.drawString(this.font, "MC Sound Ducking:", contentX, row8Y + 4, 0xFFFFD700, true);
-        boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row8Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isAudioDuckingEnabled(), posBtnX, row8Y, btnW, btnH, duckHover);
+        guiGraphics.drawString(this.font, "Compact HUD:", contentX, row8Y + 4, 0xFFFFD700, true);
+        boolean compactHover = isMouseOver(mouseX, mouseY, posBtnX, row8Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isHudCompact(), posBtnX, row8Y, btnW, btnH, compactHover);
 
-        // 9. Force Refresh Bridge Button (Row 9)
-        int row9Y = contentY + 155;
-        guiGraphics.fill(contentX, row9Y - 3, modalX + modalWidth - 16, row9Y - 2, 0x18FFFFFF);
+        // 9. Auto-Hide HUD Toggle (Row 9)
+        int row9Y = contentY + 152;
+        guiGraphics.drawString(this.font, "Auto-Hide HUD:", contentX, row9Y + 4, 0xFFFFD700, true);
+        boolean autoHideHover = isMouseOver(mouseX, mouseY, posBtnX, row9Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isHudAutoHide(), posBtnX, row9Y, btnW, btnH, autoHideHover);
 
-        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row9Y + 2, 160, 20);
-        guiGraphics.fill(contentX, row9Y + 2, contentX + 160, row9Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
-        guiGraphics.fill(contentX, row9Y + 2, contentX + 160, row9Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.fill(contentX, row9Y + 21, contentX + 160, row9Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row9Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+        // 10. MC Sound Ducking & Music Mute (Row 10)
+        int row10Y = contentY + 171;
+        guiGraphics.drawString(this.font, "MC Sound Ducking:", contentX, row10Y + 4, 0xFFFFD700, true);
+        boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row10Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isAudioDuckingEnabled(), posBtnX, row10Y, btnW, btnH, duckHover);
 
-        // 10. Author credits & website (itzCrih • itzcrih.it) (Row 10)
-        String credit = "§7eSpoty v1.1.3 by §6itzCrih §8• §ehttps://itzcrih.it";
-        guiGraphics.drawString(this.font, credit, contentX, row9Y + 27, 0xFFAAAAAA, false);
+        // 11. Force Refresh Bridge Button (Row 11)
+        int row11Y = contentY + 193;
+        guiGraphics.fill(contentX, row11Y - 3, modalX + modalWidth - 16, row11Y - 2, 0x18FFFFFF);
+
+        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row11Y + 2, 160, 20);
+        guiGraphics.fill(contentX, row11Y + 2, contentX + 160, row11Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
+        guiGraphics.fill(contentX, row11Y + 2, contentX + 160, row11Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.fill(contentX, row11Y + 21, contentX + 160, row11Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row11Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+
+        // 12. Author credits & website (itzCrih • itzcrih.it) (Row 12)
+        String credit = "§7eSpoty v1.1.4 by §6itzCrih §8• §ehttps://itzcrih.it";
+        guiGraphics.drawString(this.font, credit, contentX, row11Y + 27, 0xFFAAAAAA, false);
     }
 
     private void renderSettingsPill(GuiGraphics guiGraphics, String text, int x, int y, int w, int h, boolean hover) {
@@ -926,30 +964,52 @@ public class SpotifyScreen extends Screen {
             return;
         }
 
-        // 6. Compact toggle
+        // 6. Sky Lyrics Scale Slider Click
         int row6Y = contentY + 95;
-        if (isMouseOver(mx, my, posBtnX, row6Y, btnW, btnH)) {
+        if (isMouseOver(mx, my, posBtnX - 2, row6Y + 2, btnW + 4, 14)) {
+            this.isDraggingSkyScale = true;
+            float ratio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+            this.dragSkyScaleRatio = ratio;
+            config.setSkyLyricsScalePercent(Math.round(50 + ratio * 150));
+            setStatus("Sky Scale: " + config.getSkyLyricsScalePercent() + "%");
+            return;
+        }
+
+        // 7. Sky Lyrics Lines Slider Click
+        int row7Y = contentY + 114;
+        if (isMouseOver(mx, my, posBtnX - 2, row7Y + 2, btnW + 4, 14)) {
+            this.isDraggingSkyLines = true;
+            float ratio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+            this.dragSkyLinesRatio = ratio;
+            config.setSkyLyricsLength(Math.round(3 + ratio * 12));
+            setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
+            return;
+        }
+
+        // 8. Compact toggle
+        int row8Y = contentY + 133;
+        if (isMouseOver(mx, my, posBtnX, row8Y, btnW, btnH)) {
             config.setHudCompact(!config.isHudCompact());
             return;
         }
 
-        // 7. Auto-Hide toggle
-        int row7Y = contentY + 114;
-        if (isMouseOver(mx, my, posBtnX, row7Y, btnW, btnH)) {
+        // 9. Auto-Hide toggle
+        int row9Y = contentY + 152;
+        if (isMouseOver(mx, my, posBtnX, row9Y, btnW, btnH)) {
             config.setHudAutoHide(!config.isHudAutoHide());
             return;
         }
 
-        // 8. MC Sound Ducking toggle
-        int row8Y = contentY + 133;
-        if (isMouseOver(mx, my, posBtnX, row8Y, btnW, btnH)) {
+        // 10. MC Sound Ducking toggle
+        int row10Y = contentY + 171;
+        if (isMouseOver(mx, my, posBtnX, row10Y, btnW, btnH)) {
             config.setAudioDuckingEnabled(!config.isAudioDuckingEnabled());
             return;
         }
 
-        // 9. Reload bridge button
-        int row9Y = contentY + 155;
-        if (isMouseOver(mx, my, contentX, row9Y + 2, 160, 20)) {
+        // 11. Reload bridge button
+        int row11Y = contentY + 193;
+        if (isMouseOver(mx, my, contentX, row11Y + 2, 160, 20)) {
             stateManager.fullReload();
             setStatus("Bridge Reloaded!");
         }
@@ -996,6 +1056,24 @@ public class SpotifyScreen extends Screen {
                 setStatus("HUD Scale: " + config.getHudScalePercent() + "%");
                 return true;
             }
+
+            if (isDraggingSkyScale) {
+                int posBtnX = contentX + 120;
+                int btnW = 160;
+                this.dragSkyScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+                config.setSkyLyricsScalePercent(Math.round(50 + dragSkyScaleRatio * 150));
+                setStatus("Sky Scale: " + config.getSkyLyricsScalePercent() + "%");
+                return true;
+            }
+
+            if (isDraggingSkyLines) {
+                int posBtnX = contentX + 120;
+                int btnW = 160;
+                this.dragSkyLinesRatio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 12));
+                setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
+                return true;
+            }
         }
         return super.mouseDragged(event, dragX, dragY);
     }
@@ -1023,6 +1101,14 @@ public class SpotifyScreen extends Screen {
             if (isDraggingHudScale) {
                 config.setHudScalePercent(Math.round(50 + dragHudScaleRatio * 100));
                 isDraggingHudScale = false;
+            }
+            if (isDraggingSkyScale) {
+                config.setSkyLyricsScalePercent(Math.round(50 + dragSkyScaleRatio * 150));
+                isDraggingSkyScale = false;
+            }
+            if (isDraggingSkyLines) {
+                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 12));
+                isDraggingSkyLines = false;
             }
         }
         return super.mouseReleased(event);
