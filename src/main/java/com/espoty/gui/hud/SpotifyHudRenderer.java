@@ -15,6 +15,11 @@ import net.minecraft.resources.Identifier;
 
 public class SpotifyHudRenderer {
 
+    // Fluid Animation States
+    private static float currentExtraHeight = 0f;
+    private static String lastLyricLine = "";
+    private static long lyricLineChangeTime = 0;
+
     public static void render(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
         Minecraft client = Minecraft.getInstance();
         if (client.options.hideGui) return;
@@ -73,28 +78,37 @@ public class SpotifyHudRenderer {
         boolean hasActiveLyric = currentLyric != null && !currentLyric.getText().isEmpty();
 
         int cardHeight = config.isHudCompact() ? 44 : 54;
-        int totalHeight = cardHeight + (hasActiveLyric ? 16 : 0);
 
-        int x;
-        int y;
+        // 1. Fluid Dynamic Height Expansion / Collapse Animation for Lyrics
+        float targetExtraHeight = hasActiveLyric ? 16f : 0f;
+        currentExtraHeight += (targetExtraHeight - currentExtraHeight) * 0.18f;
+        if (Math.abs(targetExtraHeight - currentExtraHeight) < 0.1f) {
+            currentExtraHeight = targetExtraHeight;
+        }
+        int dynamicTotalHeight = cardHeight + Math.round(currentExtraHeight);
+
+        float scale = config.getHudScale();
         int margin = 10;
+        int slideOffset = (int) (slideRatio * ((cardWidth * scale) + 24));
+        int screenX;
+        int screenY;
 
         switch (config.getHudPosition()) {
             case TOP_LEFT -> {
-                x = margin - (int) (slideRatio * (cardWidth + 24));
-                y = margin;
+                screenX = margin - slideOffset;
+                screenY = margin;
             }
             case BOTTOM_LEFT -> {
-                x = margin - (int) (slideRatio * (cardWidth + 24));
-                y = screenHeight - totalHeight - margin;
+                screenX = margin - slideOffset;
+                screenY = screenHeight - (int) (dynamicTotalHeight * scale) - margin;
             }
             case BOTTOM_RIGHT -> {
-                x = screenWidth - cardWidth - margin + (int) (slideRatio * (cardWidth + 24));
-                y = screenHeight - totalHeight - margin;
+                screenX = screenWidth - (int) (cardWidth * scale) - margin + slideOffset;
+                screenY = screenHeight - (int) (dynamicTotalHeight * scale) - margin;
             }
             case TOP_RIGHT -> {
-                x = screenWidth - cardWidth - margin + (int) (slideRatio * (cardWidth + 24));
-                y = margin;
+                screenX = screenWidth - (int) (cardWidth * scale) - margin + slideOffset;
+                screenY = margin;
             }
             default -> {
                 return;
@@ -102,24 +116,38 @@ public class SpotifyHudRenderer {
         }
 
         guiGraphics.pose().pushMatrix();
-
-        float scale = config.getHudScale();
+        guiGraphics.pose().translate((float) screenX, (float) screenY);
         if (scale != 1.0f) {
             guiGraphics.pose().scale(scale, scale);
-            x = (int) (x / scale);
-            y = (int) (y / scale);
+        }
+        int x = 0;
+        int y = 0;
+
+        // 2. Unified Modern Glass Card with dynamic user opacity
+        renderModernCard(guiGraphics, x, y, cardWidth, dynamicTotalHeight, animAlpha, config.getHudOpacity());
+
+        // 3. Subtle Track Change Golden Shimmer Wave
+        if (trackAge < 450) {
+            float sweepProgress = (float) trackAge / 450.0f;
+            int sweepCenter = x + (int) (sweepProgress * cardWidth);
+            int sweepW = 32;
+            int sweepX1 = Math.max(x + 4, sweepCenter - sweepW);
+            int sweepX2 = Math.min(x + cardWidth - 4, sweepCenter + sweepW);
+            if (sweepX2 > sweepX1) {
+                float sweepAlpha = (float) Math.sin(sweepProgress * Math.PI) * animAlpha;
+                guiGraphics.fillGradient(sweepX1, y, sweepX2, y + 2,
+                        applyAlpha(0x00FFD700, sweepAlpha),
+                        applyAlpha(0xFFFFFDE7, sweepAlpha));
+            }
         }
 
-        // 1. Unified Modern Glass Card with dynamic user opacity
-        renderModernCard(guiGraphics, x, y, cardWidth, totalHeight, animAlpha, config.getHudOpacity());
-
-        // 2. Album Cover (Chamfered frame)
+        // 4. Album Cover (Chamfered frame)
         int artSize = config.isHudCompact() ? 32 : 38;
         int artX = x + 8;
         int artY = y + 8;
         renderModernAlbumArt(guiGraphics, state.getAlbumArtUrl(), artX, artY, artSize, animAlpha);
 
-        // 3. Track Details
+        // 5. Track Details
         int textX = artX + artSize + 8;
         int maxTextWidth = cardWidth - (textX - x) - 10;
 
@@ -158,7 +186,7 @@ public class SpotifyHudRenderer {
         }
         guiGraphics.drawString(font, artist, textX, artistY, applyAlpha(0xFFFFF066, animAlpha), true);
 
-        // 4. Progress Bar
+        // 6. Progress Bar
         long progressMs = stateManager.getInterpolatedProgressMs();
         long durationMs = state.getDurationMs();
         float progressRatio = durationMs > 0 ? Math.min(1.0f, (float) progressMs / durationMs) : 0f;
@@ -191,30 +219,44 @@ public class SpotifyHudRenderer {
             guiGraphics.pose().popMatrix();
         }
 
-        // 5. Seamless Integrated Lyrics Row
-        if (hasActiveLyric) {
-            int dividerY = y + cardHeight - 2;
-            guiGraphics.fill(x + 8, dividerY, x + cardWidth - 8, dividerY + 1, applyAlpha(0x22FFFFFF, animAlpha * config.getHudOpacity()));
-
-            int lyricY = dividerY + 4;
-            // Glowing note icon
-            guiGraphics.drawString(font, "♪", x + 8, lyricY, applyAlpha(0xFFFFD700, animAlpha), true);
-
-            // Active lyric text with marquee if long
+        // 7. Fluid Animated Lyric Line (Float-Up & Fade Transition)
+        if (hasActiveLyric && currentExtraHeight > 2.0f) {
             String lyricText = currentLyric.getText();
-            int lyricWidth = font.width(lyricText);
-            int maxLyricW = cardWidth - 28;
+            if (!lyricText.equals(lastLyricLine)) {
+                lastLyricLine = lyricText;
+                lyricLineChangeTime = now;
+            }
 
-            guiGraphics.enableScissor(x + 18, lyricY, x + cardWidth - 8, lyricY + 11);
+            long lyricElapsed = now - lyricLineChangeTime;
+            float lyricProgress = Math.min(1.0f, lyricElapsed / 220.0f);
+            float lyricEase = 1.0f - (float) Math.pow(1.0f - lyricProgress, 3);
+
+            int lyricYOffset = (int) ((1.0f - lyricEase) * 4);
+            float heightRatio = Math.min(1.0f, currentExtraHeight / 16.0f);
+            float lineAlpha = animAlpha * lyricEase * heightRatio;
+
+            int dividerY = y + cardHeight - 2;
+            guiGraphics.fill(x + 8, dividerY, x + cardWidth - 8, dividerY + 1,
+                    applyAlpha(0x22FFFFFF, animAlpha * config.getHudOpacity() * heightRatio));
+
+            int lyricY = dividerY + 4 + lyricYOffset;
+            guiGraphics.drawString(font, "♪", x + 8, lyricY, applyAlpha(0xFFFFD700, lineAlpha), true);
+
+            int maxLyricW = cardWidth - 28;
+            int lyricWidth = font.width(lyricText);
+
+            guiGraphics.enableScissor(x + 18, dividerY + 1, x + cardWidth - 8, y + dynamicTotalHeight);
             if (lyricWidth > maxLyricW) {
                 long cycle = (now / 35) % (lyricWidth + 30);
                 int scrollX = (int) (x + 18 - cycle);
-                guiGraphics.drawString(font, lyricText, scrollX, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
-                guiGraphics.drawString(font, lyricText, scrollX + lyricWidth + 30, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
+                guiGraphics.drawString(font, lyricText, scrollX, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
+                guiGraphics.drawString(font, lyricText, scrollX + lyricWidth + 30, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
             } else {
-                guiGraphics.drawString(font, lyricText, x + 18, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
+                guiGraphics.drawString(font, lyricText, x + 18, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
             }
             guiGraphics.disableScissor();
+        } else if (!hasActiveLyric) {
+            lastLyricLine = "";
         }
 
         guiGraphics.pose().popMatrix();

@@ -182,12 +182,20 @@ public class ModConfig {
     }
 
     public float getHudScale() {
-        return hudScale;
+        return Math.max(0.5f, Math.min(1.5f, hudScale));
     }
 
     public void setHudScale(float hudScale) {
-        this.hudScale = hudScale;
+        this.hudScale = Math.max(0.5f, Math.min(1.5f, hudScale));
         save();
+    }
+
+    public int getHudScalePercent() {
+        return Math.round(getHudScale() * 100.0f);
+    }
+
+    public void setHudScalePercent(int percent) {
+        setHudScale(Math.max(50, Math.min(150, percent)) / 100.0f);
     }
 
     public float getHudOpacity() {

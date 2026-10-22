@@ -32,6 +32,10 @@ public class ESpotyModClient implements ClientModInitializer {
     private static KeyMapping keyPrev;
     private static KeyMapping keyToggleHud;
 
+    public static KeyMapping getKeyOpenGui() {
+        return keyOpenGui;
+    }
+
     @Override
     public void onInitializeClient() {
         // Initialize config & managers

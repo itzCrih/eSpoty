@@ -39,7 +39,7 @@ public class SpotifyScreen extends Screen {
     private int modalX;
     private int modalY;
     private int modalWidth = 390;
-    private int modalHeight = 270;
+    private int modalHeight = 275;
 
     // Interactive controls state
     private boolean isDraggingSeek = false;
@@ -48,6 +48,13 @@ public class SpotifyScreen extends Screen {
     private float dragVolumeRatio = 0f;
     private boolean isDraggingHudOpacity = false;
     private float dragHudOpacityRatio = 0.85f;
+    private boolean isDraggingHudScale = false;
+    private float dragHudScaleRatio = 0.5f;
+
+    // Closing & Tab Animation States
+    private boolean isClosing = false;
+    private long closeStartTime = 0;
+    private long tabChangeTime = System.currentTimeMillis();
 
     // Lyrics & Queue scroll
     private int lyricsScrollY = 0;
@@ -66,8 +73,10 @@ public class SpotifyScreen extends Screen {
     protected void init() {
         super.init();
         this.openTime = System.currentTimeMillis();
+        this.isClosing = false;
+        this.tabChangeTime = System.currentTimeMillis();
         this.modalWidth = Math.min(390, this.width - 20);
-        this.modalHeight = Math.min(270, this.height - 20);
+        this.modalHeight = Math.min(275, this.height - 20);
         this.modalX = (this.width - this.modalWidth) / 2;
         this.modalY = (this.height - this.modalHeight) / 2;
 
@@ -85,20 +94,42 @@ public class SpotifyScreen extends Screen {
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         long now = System.currentTimeMillis();
 
-        // 1. Dark Vignette Backdrop
-        guiGraphics.fill(0, 0, this.width, this.height, 0x99000000);
+        if (isClosing) {
+            long closeElapsed = now - closeStartTime;
+            if (closeElapsed >= 150) {
+                super.onClose();
+                return;
+            }
+        }
 
-        // Smooth Scale-in Pop Animation for the modal
-        long elapsed = now - openTime;
-        float animProgress = Math.min(1.0f, elapsed / 220.0f);
-        float scale = 0.88f + (0.12f * (1.0f - (float) Math.pow(1.0f - animProgress, 3)));
+        // Calculate smooth animation progress & scale
+        float animScale;
+        float backdropAlpha;
+
+        if (isClosing) {
+            long closeElapsed = now - closeStartTime;
+            float p = Math.min(1.0f, closeElapsed / 150.0f);
+            float ease = p * p;
+            animScale = 1.0f - (ease * 0.12f);
+            backdropAlpha = (1.0f - p) * 0.60f;
+        } else {
+            long elapsed = now - openTime;
+            float animProgress = Math.min(1.0f, elapsed / 220.0f);
+            float ease = 1.0f - (float) Math.pow(1.0f - animProgress, 3);
+            animScale = 0.88f + (0.12f * ease);
+            backdropAlpha = ease * 0.60f;
+        }
+
+        // 1. Smooth Fade Dark Vignette Backdrop
+        int alphaHex = Math.max(0, Math.min(255, (int) (backdropAlpha * 255)));
+        guiGraphics.fill(0, 0, this.width, this.height, (alphaHex << 24));
 
         int cx = modalX + (modalWidth / 2);
         int cy = modalY + (modalHeight / 2);
 
         guiGraphics.pose().pushMatrix();
         guiGraphics.pose().translate((float) cx, (float) cy);
-        guiGraphics.pose().scale(scale, scale);
+        guiGraphics.pose().scale(animScale, animScale);
         guiGraphics.pose().translate((float) -cx, (float) -cy);
 
         // 2. Modal Frame with Drop Shadow & Cyber-Gold Border
@@ -107,13 +138,23 @@ public class SpotifyScreen extends Screen {
         // 3. Header Bar with Tabs
         renderHeader(guiGraphics, mouseX, mouseY, now);
 
-        // 4. Tab Content
+        // 4. Tab Content with Snappy Smooth Vertical Glide Transition
+        long tabElapsed = now - tabChangeTime;
+        float tabProgress = Math.min(1.0f, tabElapsed / 160.0f);
+        float tabEase = 1.0f - (float) Math.pow(1.0f - tabProgress, 3);
+        float tabGlideY = (1.0f - tabEase) * 6.0f;
+
+        guiGraphics.pose().pushMatrix();
+        guiGraphics.pose().translate(0f, tabGlideY);
+
         switch (currentTab) {
             case PLAYER -> renderPlayerTab(guiGraphics, mouseX, mouseY, now);
             case LYRICS -> renderLyricsTab(guiGraphics, mouseX, mouseY);
             case QUEUE -> renderQueueTab(guiGraphics, mouseX, mouseY);
             case SETTINGS -> renderSettingsTab(guiGraphics, mouseX, mouseY);
         }
+
+        guiGraphics.pose().popMatrix();
 
         // 5. Status Feedback Banner
         if (!statusMessage.isEmpty() && now - statusMessageTime < 3500) {
@@ -555,13 +596,13 @@ public class SpotifyScreen extends Screen {
         int btnH = 16;
         int posBtnX = contentX + 120;
 
-        // 1. HUD Position
+        // 1. HUD Position (Row 1)
         guiGraphics.drawString(this.font, "HUD Position:", contentX, contentY + 4, 0xFFFFD700, true);
         boolean posHover = isMouseOver(mouseX, mouseY, posBtnX, contentY, btnW, btnH);
         renderSettingsPill(guiGraphics, config.getHudPosition().getDisplayName(), posBtnX, contentY, btnW, btnH, posHover);
 
-        // 2. HUD Opacity Slider (Interactive 0% to 100%)
-        int row2Y = contentY + 22;
+        // 2. HUD Opacity Slider (Row 2: 0% to 100%)
+        int row2Y = contentY + 20;
         guiGraphics.drawString(this.font, "HUD Opacity:", contentX, row2Y + 4, 0xFFFFD700, true);
         int opacPercent = isDraggingHudOpacity ? Math.round(dragHudOpacityRatio * 100) : config.getHudOpacityPercent();
 
@@ -575,47 +616,62 @@ public class SpotifyScreen extends Screen {
         int opacKnobX = posBtnX + opacFillW;
         guiGraphics.fill(opacKnobX - 2, row2Y + 4, opacKnobX + 3, row2Y + 12, 0xFFFFD700);
         guiGraphics.fill(opacKnobX - 1, row2Y + 5, opacKnobX + 2, row2Y + 11, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, opacPercent + "%", posBtnX + btnW + 6, row2Y + 4, 0xFFAAAAAA, true);
 
-        String opacText = opacPercent + "%";
-        guiGraphics.drawString(this.font, opacText, posBtnX + btnW + 6, row2Y + 4, 0xFFAAAAAA, true);
+        // 3. HUD Scale Slider (Row 3: 50% to 150%)
+        int row3Y = contentY + 40;
+        guiGraphics.drawString(this.font, "HUD Scale:", contentX, row3Y + 4, 0xFFFFD700, true);
+        int scalePercent = isDraggingHudScale ? Math.round(50 + dragHudScaleRatio * 100) : config.getHudScalePercent();
 
-        // 3. HUD Lyrics
-        int row3Y = contentY + 44;
-        guiGraphics.drawString(this.font, "HUD Lyrics:", contentX, row3Y + 4, 0xFFFFD700, true);
-        boolean lyricsHover = isMouseOver(mouseX, mouseY, posBtnX, row3Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isHudShowLyrics(), posBtnX, row3Y, btnW, btnH, lyricsHover);
+        // Scale Track
+        guiGraphics.fill(posBtnX, row3Y + 6, posBtnX + btnW, row3Y + 10, 0x35FFFFFF);
+        float scaleRatio = (scalePercent - 50) / 100.0f;
+        int scaleFillW = (int) (btnW * Math.max(0f, Math.min(1f, scaleRatio)));
+        if (scaleFillW > 0) {
+            guiGraphics.fillGradient(posBtnX, row3Y + 6, posBtnX + scaleFillW, row3Y + 10, 0xFFFFD700, 0xFFFFF176);
+        }
+        int scaleKnobX = posBtnX + scaleFillW;
+        guiGraphics.fill(scaleKnobX - 2, row3Y + 4, scaleKnobX + 3, row3Y + 12, 0xFFFFD700);
+        guiGraphics.fill(scaleKnobX - 1, row3Y + 5, scaleKnobX + 2, row3Y + 11, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, scalePercent + "%", posBtnX + btnW + 6, row3Y + 4, 0xFFAAAAAA, true);
 
-        // 4. Compact HUD
-        int row4Y = contentY + 66;
-        guiGraphics.drawString(this.font, "Compact HUD:", contentX, row4Y + 4, 0xFFFFD700, true);
-        boolean compactHover = isMouseOver(mouseX, mouseY, posBtnX, row4Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isHudCompact(), posBtnX, row4Y, btnW, btnH, compactHover);
+        // 4. HUD Lyrics Toggle (Row 4)
+        int row4Y = contentY + 60;
+        guiGraphics.drawString(this.font, "HUD Lyrics:", contentX, row4Y + 4, 0xFFFFD700, true);
+        boolean lyricsHover = isMouseOver(mouseX, mouseY, posBtnX, row4Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isHudShowLyrics(), posBtnX, row4Y, btnW, btnH, lyricsHover);
 
-        // 5. Auto-Hide HUD
-        int row5Y = contentY + 88;
-        guiGraphics.drawString(this.font, "Auto-Hide HUD:", contentX, row5Y + 4, 0xFFFFD700, true);
-        boolean autoHideHover = isMouseOver(mouseX, mouseY, posBtnX, row5Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isHudAutoHide(), posBtnX, row5Y, btnW, btnH, autoHideHover);
+        // 5. Compact HUD Toggle (Row 5)
+        int row5Y = contentY + 80;
+        guiGraphics.drawString(this.font, "Compact HUD:", contentX, row5Y + 4, 0xFFFFD700, true);
+        boolean compactHover = isMouseOver(mouseX, mouseY, posBtnX, row5Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isHudCompact(), posBtnX, row5Y, btnW, btnH, compactHover);
 
-        // 6. MC Sound Ducking & Music Mute
-        int row6Y = contentY + 110;
-        guiGraphics.drawString(this.font, "MC Sound Ducking:", contentX, row6Y + 4, 0xFFFFD700, true);
-        boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row6Y, btnW, btnH);
-        renderSettingsToggle(guiGraphics, config.isAudioDuckingEnabled(), posBtnX, row6Y, btnW, btnH, duckHover);
+        // 6. Auto-Hide HUD Toggle (Row 6)
+        int row6Y = contentY + 100;
+        guiGraphics.drawString(this.font, "Auto-Hide HUD:", contentX, row6Y + 4, 0xFFFFD700, true);
+        boolean autoHideHover = isMouseOver(mouseX, mouseY, posBtnX, row6Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isHudAutoHide(), posBtnX, row6Y, btnW, btnH, autoHideHover);
 
-        // 7. Force Refresh Bridge Button (Modern glassmorphic)
-        int row7Y = contentY + 138;
-        guiGraphics.fill(contentX, row7Y - 4, modalX + modalWidth - 16, row7Y - 3, 0x18FFFFFF);
+        // 7. MC Sound Ducking & Music Mute (Row 7)
+        int row7Y = contentY + 120;
+        guiGraphics.drawString(this.font, "MC Sound Ducking:", contentX, row7Y + 4, 0xFFFFD700, true);
+        boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row7Y, btnW, btnH);
+        renderSettingsToggle(guiGraphics, config.isAudioDuckingEnabled(), posBtnX, row7Y, btnW, btnH, duckHover);
 
-        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row7Y + 2, 160, 20);
-        guiGraphics.fill(contentX, row7Y + 2, contentX + 160, row7Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
-        guiGraphics.fill(contentX, row7Y + 2, contentX + 160, row7Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.fill(contentX, row7Y + 21, contentX + 160, row7Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row7Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+        // 8. Force Refresh Bridge Button (Row 8)
+        int row8Y = contentY + 144;
+        guiGraphics.fill(contentX, row8Y - 3, modalX + modalWidth - 16, row8Y - 2, 0x18FFFFFF);
 
-        // Author credits & website (itzCrih • itzcrih.it)
-        String credit = "§7eSpoty v1.0.5 by §6itzCrih §8• §ehttps://itzcrih.it";
-        guiGraphics.drawString(this.font, credit, contentX, row7Y + 28, 0xFFAAAAAA, false);
+        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row8Y + 2, 160, 20);
+        guiGraphics.fill(contentX, row8Y + 2, contentX + 160, row8Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
+        guiGraphics.fill(contentX, row8Y + 2, contentX + 160, row8Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.fill(contentX, row8Y + 21, contentX + 160, row8Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row8Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+
+        // 9. Author credits & website (itzCrih • itzcrih.it) (Row 9)
+        String credit = "§7eSpoty v1.0.6 by §6itzCrih §8• §ehttps://itzcrih.it";
+        guiGraphics.drawString(this.font, credit, contentX, row8Y + 28, 0xFFAAAAAA, false);
     }
 
     private void renderSettingsPill(GuiGraphics guiGraphics, String text, int x, int y, int w, int h, boolean hover) {
@@ -670,7 +726,7 @@ public class SpotifyScreen extends Screen {
         int closeX = modalX + modalWidth - 18;
         int closeY = modalY + 10;
         if (isMouseOver(mx, my, closeX - 4, closeY, 16, 14)) {
-            this.onClose();
+            this.startCloseAnimation();
             return true;
         }
 
@@ -681,9 +737,12 @@ public class SpotifyScreen extends Screen {
             int tabW = this.font.width(tab.getTitle()) + 16;
             int tabH = 18;
             if (isMouseOver(mx, my, tabX, tabY, tabW, tabH)) {
-                this.currentTab = tab;
-                if (tab == Tab.QUEUE) {
-                    stateManager.refreshQueue(null);
+                if (this.currentTab != tab) {
+                    this.currentTab = tab;
+                    this.tabChangeTime = System.currentTimeMillis();
+                    if (tab == Tab.QUEUE) {
+                        stateManager.refreshQueue(null);
+                    }
                 }
                 return true;
             }
@@ -825,7 +884,7 @@ public class SpotifyScreen extends Screen {
         }
 
         // 2. HUD Opacity Slider Click
-        int row2Y = contentY + 22;
+        int row2Y = contentY + 20;
         if (isMouseOver(mx, my, posBtnX - 2, row2Y + 2, btnW + 4, 14)) {
             this.isDraggingHudOpacity = true;
             float ratio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
@@ -835,37 +894,48 @@ public class SpotifyScreen extends Screen {
             return;
         }
 
-        // 3. Lyrics toggle
-        int row3Y = contentY + 44;
-        if (isMouseOver(mx, my, posBtnX, row3Y, btnW, btnH)) {
+        // 3. HUD Scale Slider Click
+        int row3Y = contentY + 40;
+        if (isMouseOver(mx, my, posBtnX - 2, row3Y + 2, btnW + 4, 14)) {
+            this.isDraggingHudScale = true;
+            float ratio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+            this.dragHudScaleRatio = ratio;
+            config.setHudScalePercent(Math.round(50 + ratio * 100));
+            setStatus("HUD Scale: " + config.getHudScalePercent() + "%");
+            return;
+        }
+
+        // 4. Lyrics toggle
+        int row4Y = contentY + 60;
+        if (isMouseOver(mx, my, posBtnX, row4Y, btnW, btnH)) {
             config.setHudShowLyrics(!config.isHudShowLyrics());
             return;
         }
 
-        // 4. Compact toggle
-        int row4Y = contentY + 66;
-        if (isMouseOver(mx, my, posBtnX, row4Y, btnW, btnH)) {
+        // 5. Compact toggle
+        int row5Y = contentY + 80;
+        if (isMouseOver(mx, my, posBtnX, row5Y, btnW, btnH)) {
             config.setHudCompact(!config.isHudCompact());
             return;
         }
 
-        // 5. Auto-Hide toggle
-        int row5Y = contentY + 88;
-        if (isMouseOver(mx, my, posBtnX, row5Y, btnW, btnH)) {
+        // 6. Auto-Hide toggle
+        int row6Y = contentY + 100;
+        if (isMouseOver(mx, my, posBtnX, row6Y, btnW, btnH)) {
             config.setHudAutoHide(!config.isHudAutoHide());
             return;
         }
 
-        // 6. MC Sound Ducking toggle
-        int row6Y = contentY + 110;
-        if (isMouseOver(mx, my, posBtnX, row6Y, btnW, btnH)) {
+        // 7. MC Sound Ducking toggle
+        int row7Y = contentY + 120;
+        if (isMouseOver(mx, my, posBtnX, row7Y, btnW, btnH)) {
             config.setAudioDuckingEnabled(!config.isAudioDuckingEnabled());
             return;
         }
 
-        // 7. Reload bridge button
-        int row7Y = contentY + 138;
-        if (isMouseOver(mx, my, contentX, row7Y + 2, 160, 20)) {
+        // 8. Reload bridge button
+        int row8Y = contentY + 144;
+        if (isMouseOver(mx, my, contentX, row8Y + 2, 160, 20)) {
             stateManager.fullReload();
             setStatus("Bridge Reloaded!");
         }
@@ -903,6 +973,15 @@ public class SpotifyScreen extends Screen {
                 setStatus("HUD Opacity: " + config.getHudOpacityPercent() + "%");
                 return true;
             }
+
+            if (isDraggingHudScale) {
+                int posBtnX = contentX + 120;
+                int btnW = 160;
+                this.dragHudScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
+                config.setHudScalePercent(Math.round(50 + dragHudScaleRatio * 100));
+                setStatus("HUD Scale: " + config.getHudScalePercent() + "%");
+                return true;
+            }
         }
         return super.mouseDragged(event, dragX, dragY);
     }
@@ -927,14 +1006,36 @@ public class SpotifyScreen extends Screen {
                 config.setHudOpacity(dragHudOpacityRatio);
                 isDraggingHudOpacity = false;
             }
+            if (isDraggingHudScale) {
+                config.setHudScalePercent(Math.round(50 + dragHudScaleRatio * 100));
+                isDraggingHudScale = false;
+            }
         }
         return super.mouseReleased(event);
+    }
+
+    public void startCloseAnimation() {
+        if (!isClosing) {
+            this.isClosing = true;
+            this.closeStartTime = System.currentTimeMillis();
+        }
+    }
+
+    @Override
+    public void onClose() {
+        startCloseAnimation();
     }
 
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
-            this.onClose();
+            startCloseAnimation();
+            return true;
+        }
+
+        if (com.espoty.client.ESpotyModClient.getKeyOpenGui() != null
+                && com.espoty.client.ESpotyModClient.getKeyOpenGui().matches(event)) {
+            startCloseAnimation();
             return true;
         }
 
