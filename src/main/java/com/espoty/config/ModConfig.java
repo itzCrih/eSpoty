@@ -58,6 +58,7 @@ public class ModConfig {
     private boolean showChatFeedback = true;
     private boolean audioDuckingEnabled = true;
     private float duckingMultiplier = 0.35f;
+    private boolean checkForUpdates = true;
     private Set<String> likedTracks = new HashSet<>();
 
     // Theme Color Palette (Royal Gold & Neon Yellow)
@@ -295,6 +296,15 @@ public class ModConfig {
 
     public void setAudioDuckingEnabled(boolean audioDuckingEnabled) {
         this.audioDuckingEnabled = audioDuckingEnabled;
+        save();
+    }
+
+    public boolean isCheckForUpdates() {
+        return checkForUpdates;
+    }
+
+    public void setCheckForUpdates(boolean checkForUpdates) {
+        this.checkForUpdates = checkForUpdates;
         save();
     }
 

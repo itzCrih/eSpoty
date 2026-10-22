@@ -90,6 +90,16 @@ public class AlbumArtManager {
                                 DynamicTexture dynamicTexture = new DynamicTexture(() -> "espoty_album", image);
                                 String hash = Long.toHexString(url.hashCode() & 0xFFFFFFFFL);
                                 Identifier loc = Identifier.fromNamespaceAndPath(ESpotyMod.MOD_ID, "album_" + hash);
+
+                                // Bounded texture cache: evict oldest if size exceeds 40 to prevent long-session memory leak
+                                if (textureMap.size() >= 40) {
+                                    String oldestKey = textureMap.keySet().iterator().next();
+                                    Identifier oldLoc = textureMap.remove(oldestKey);
+                                    if (oldLoc != null) {
+                                        Minecraft.getInstance().getTextureManager().release(oldLoc);
+                                    }
+                                }
+
                                 Minecraft.getInstance().getTextureManager().register(loc, dynamicTexture);
                                 textureMap.put(url, loc);
                             } catch (Exception e) {

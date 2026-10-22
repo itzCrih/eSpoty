@@ -708,19 +708,39 @@ public class SpotifyScreen extends Screen {
         boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row10Y, btnW, btnH);
         renderSettingsToggle(guiGraphics, config.isAudioDuckingEnabled(), posBtnX, row10Y, btnW, btnH, duckHover);
 
-        // 11. Force Refresh Bridge Button (Row 11)
+        // 11. Actions: Refresh Bridge & GitHub Update Checker (Row 11)
         int row11Y = contentY + 193;
         guiGraphics.fill(contentX, row11Y - 3, modalX + modalWidth - 16, row11Y - 2, 0x18FFFFFF);
 
-        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row11Y + 2, 160, 20);
-        guiGraphics.fill(contentX, row11Y + 2, contentX + 160, row11Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
-        guiGraphics.fill(contentX, row11Y + 2, contentX + 160, row11Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.fill(contentX, row11Y + 21, contentX + 160, row11Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
-        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row11Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+        int btnWidth = 174;
+        int btn1X = contentX;
+        int btn2X = contentX + 184;
+
+        boolean reloadHover = isMouseOver(mouseX, mouseY, btn1X, row11Y + 2, btnWidth, 20);
+        guiGraphics.fill(btn1X, row11Y + 2, btn1X + btnWidth, row11Y + 22, reloadHover ? 0x40FFD700 : 0x22FFFFFF);
+        guiGraphics.fill(btn1X, row11Y + 2, btn1X + btnWidth, row11Y + 3, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.fill(btn1X, row11Y + 21, btn1X + btnWidth, row11Y + 22, reloadHover ? 0xFFFFD700 : 0x66FFD700);
+        guiGraphics.drawCenteredString(this.font, "Reload Bridge", btn1X + (btnWidth / 2), row11Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
+
+        com.espoty.update.UpdateChecker updateChecker = com.espoty.update.UpdateChecker.getInstance();
+        boolean hasUpdate = updateChecker.isUpdateAvailable();
+        boolean updateHover = isMouseOver(mouseX, mouseY, btn2X, row11Y + 2, btnWidth, 20);
+
+        int updateBg = hasUpdate ? (updateHover ? 0x4400E676 : 0x2800E676) : (updateHover ? 0x40FFD700 : 0x22FFFFFF);
+        int updateBorder = hasUpdate ? (updateHover ? 0xFF00E676 : 0xAA00E676) : (updateHover ? 0xFFFFD700 : 0x66FFD700);
+        int updateTextColor = hasUpdate ? (updateHover ? 0xFFB9F6CA : 0xFF00E676) : (updateHover ? 0xFFFFF59D : 0xFFFFD700);
+
+        guiGraphics.fill(btn2X, row11Y + 2, btn2X + btnWidth, row11Y + 22, updateBg);
+        guiGraphics.fill(btn2X, row11Y + 2, btn2X + btnWidth, row11Y + 3, updateBorder);
+        guiGraphics.fill(btn2X, row11Y + 21, btn2X + btnWidth, row11Y + 22, updateBorder);
+
+        String updateLabel = hasUpdate ? "Update v" + updateChecker.getLatestVersion() + " Available!" : "Check for Updates";
+        guiGraphics.drawCenteredString(this.font, updateLabel, btn2X + (btnWidth / 2), row11Y + 8, updateTextColor);
 
         // 12. Author credits & website (itzCrih • itzcrih.it) (Row 12)
-        String credit = "§7eSpoty v1.1.4 by §6itzCrih §8• §ehttps://itzcrih.it";
-        guiGraphics.drawString(this.font, credit, contentX, row11Y + 27, 0xFFAAAAAA, false);
+        String credit = "§7eSpoty v1.1.4 by §6itzCrih §8• §ehttps://itzcrih.it" + (hasUpdate ? " §a(New v" + updateChecker.getLatestVersion() + "!)" : "");
+        boolean creditHover = isMouseOver(mouseX, mouseY, contentX, row11Y + 25, 300, 14);
+        guiGraphics.drawString(this.font, credit, contentX, row11Y + 27, creditHover ? 0xFFFFFFFF : 0xFFAAAAAA, false);
     }
 
     private void renderSettingsPill(GuiGraphics guiGraphics, String text, int x, int y, int w, int h, boolean hover) {
@@ -1012,11 +1032,36 @@ public class SpotifyScreen extends Screen {
             return;
         }
 
-        // 11. Reload bridge button
+        // 11. Force Refresh Bridge Button
         int row11Y = contentY + 193;
-        if (isMouseOver(mx, my, contentX, row11Y + 2, 160, 20)) {
+        int btnWidth = 174;
+        int btn1X = contentX;
+        int btn2X = contentX + 184;
+
+        if (isMouseOver(mx, my, btn1X, row11Y + 2, btnWidth, 20)) {
             stateManager.fullReload();
             setStatus("Bridge Reloaded!");
+            return;
+        }
+
+        // 12. GitHub Updates Button
+        if (isMouseOver(mx, my, btn2X, row11Y + 2, btnWidth, 20)) {
+            com.espoty.update.UpdateChecker checker = com.espoty.update.UpdateChecker.getInstance();
+            if (checker.isUpdateAvailable()) {
+                com.espoty.update.UpdateChecker.openWebpage(checker.getReleaseUrl());
+                setStatus("Opening release page...");
+            } else {
+                setStatus("Checking for updates...");
+                checker.checkForUpdatesAsync().thenAccept(avail -> {
+                    setStatus(avail ? "Update available: v" + checker.getLatestVersion() : "eSpoty is up to date (v" + com.espoty.update.UpdateChecker.getCurrentVersion() + ")");
+                });
+            }
+            return;
+        }
+
+        // 13. Author Website Link
+        if (isMouseOver(mx, my, contentX, row11Y + 25, 300, 14)) {
+            com.espoty.update.UpdateChecker.openWebpage("https://itzcrih.it");
         }
     }
 

@@ -1,96 +1,116 @@
-# ⚡ eSpoty — Full Spotify Integration for Minecraft (Fabric 1.21.x – 1.21.11)
+# eSpoty - Spotify Integration for Minecraft (Fabric 1.21.x - 1.21.11)
 
-![eSpoty Mod](src/main/resources/assets/espoty/icon.png)
-
-A high-performance, modern Spotify integration mod for **Fabric 1.21 through 1.21.11**. Featuring an ultra-sleek **Gold & Yellow** glassmorphic HUD, real-time synchronized karaoke lyrics, full playback controls, queue management, and automatic local PC Spotify process detection.
+A high-performance, modern Spotify integration mod for Fabric 1.21 through 1.21.11. Features a sleek Gold and Yellow glassmorphic HUD, real-time synchronized karaoke lyrics, 3D celestial sky lyrics along the horizon, full playback controls, queue management, audio ducking, and automatic local PC Spotify desktop process detection.
 
 ---
 
-## ✨ Features
+## Features
 
-- 🟢 **Zero Login Required / Direct PC Link**: Automatically connects directly to your running Spotify app on Windows via Windows SMTC and local TCP socket. Zero developer app setup, zero client IDs or secrets, and zero browser login required!
-- 🎧 **Interactive In-Game Hub (Screen)**:
-  - **Now Playing**: High-resolution album artwork (with iTunes 600x600 HD art fetching), track title, artists, album, and liked songs heart button (💛/🤍).
-  - **Full Playback Controls**: Play/Pause, Next (⏭), Previous (⏮), Shuffle toggle (🔀), and Repeat cycle (🔁 Off / All / One).
-  - **Dynamic State Disabling**: Buttons automatically disable and dim if Spotify marks them as unavailable (e.g. shuffle or repeat restrictions).
-  - **Interactive Seek Bar**: Click or drag the progress scrubber to jump to any point in the track.
-  - **Volume Slider**: Interactive real-time audio master volume slider (0% - 100%) with quick mute/unmute toggle.
-- 💛 **Liked Songs (Favorites)**:
-  - Favorite any track with one click using the Heart button.
-  - Liked tracks show a radiant Gold heart (`❤`) both in the Hub and directly on the in-game HUD!
-- 📜 **Real-Time Synchronized Lyrics**:
-  - Live karaoke-style synchronized lyrics powered by LRCLib database.
-  - Accurate sub-frame alignment with zero delay or freezing.
-  - Active line highlighted in glowing Gold (`#FFD700`).
-  - Synced HUD lyrics: floating pill below the progress bar in-game!
-- 📋 **Live Queue Viewer**:
-  - Displays the current song and all upcoming tracks in your Spotify playback queue with song titles, artists, and durations.
-- 🎨 **Modern Gold & Yellow HUD Overlay**:
-  - Glassmorphic dark card (`#121217`) with vibrant Gold (`#FFD700`) and Yellow (`#FFF176`) borders.
-  - Smooth Marquee auto-scroller for long track titles.
+- Direct Local PC Link (Zero Login Required):
+  - Automatically connects to your running Spotify desktop app on Windows via Windows Media SMTC and a local loopback bridge.
+  - Zero developer account setup, zero client IDs or secrets, and zero browser login required.
+  - Optional Spotify Web API PKCE login for extended remote control features.
+
+- Interactive In-Game Control Hub (Screen):
+  - Now Playing: High-resolution album artwork, track title, artists, album, and favorites heart button.
+  - Full Playback Controls: Play, Pause, Next Track, Previous Track, Shuffle toggle, and Repeat cycle (Off / All / One).
+  - Dynamic State Handling: Control buttons automatically adapt and dim if playback actions are restricted by Spotify.
+  - Interactive Seek Bar: Click or drag the progress scrubber to jump to any timestamp in the track.
+  - Master Volume Slider: Real-time volume scrubber (0% - 100%) with instant responsiveness.
+
+- Liked Songs (Favorites):
+  - Favorite any track with a single click using the Heart button.
+  - Liked tracks display a gold heart indicator both in the Hub and directly on the in-game HUD.
+
+- Real-Time Synchronized Lyrics:
+  - Live karaoke-style synchronized lyrics powered by the LRCLib database.
+  - Accurate sub-frame alignment with smooth auto-scroll.
+  - Active line highlighted in bright white with smooth progression.
+  - HUD lyrics pill: subtle floating pill below the in-game HUD.
+
+- Celestial Sky Lyrics (3D World Horizon):
+  - Pure lyrics rendered directly in the Minecraft sky along the horizon.
+  - Strict depth-tested occlusion: blocks, terrain, pillars, trees, and entities always occlude the text (never bleeds through structures).
+  - Customizable scale slider in settings (50% to 200%).
+  - Customizable line count slider in settings (3 to 15 lines).
+  - Dual-depth drop shadow architecture that completely eliminates OpenGL Z-fighting flicker.
+
+- Modern Gold and Yellow In-Game HUD:
+  - Glassmorphic dark card with electric gold and yellow borders.
+  - Smooth marquee scroller for long track titles and artists.
   - Dynamic client-interpolated progress bar running at 60+ FPS.
-  - Configurable positions: `Top Right`, `Top Left`, `Bottom Right`, `Bottom Left`, or `Disabled`.
-  - Compact mode and Auto-Hide support.
-- ⚡ **High Performance & Security**:
-  - **Zero Frame Drops**: Non-blocking asynchronous HTTP/2 client (`java.net.http.HttpClient`) and background scheduling. Never blocks the Minecraft render thread!
-  - **Client-Side Progress Prediction**: Calculates interpolated track progress locally between polling intervals, saving network bandwidth and eliminating API rate-limiting while providing 60 FPS smoothness.
-  - **RFC 7636 PKCE OAuth 2.0 Flow**: Industry-standard Proof Key for Code Exchange. No client secret required, tokens securely saved locally in `.minecraft/config/espoty/tokens.json`.
-  - **Texture Caching**: Album covers are downloaded asynchronously and converted to `DynamicTexture` objects in RAM, preventing memory leaks and repetitive network requests.
+  - Configurable screen positions: Top Right, Top Left, Bottom Right, Bottom Left, or Disabled.
+  - Compact mode and configurable Auto-Hide timer.
+
+- Minecraft Audio Ducking:
+  - Automatically dims in-game ambient music and sound effects while Spotify is playing music, restoring standard volumes when paused.
+
+- Mod Menu Integration:
+  - Direct configuration and Hub access from the Fabric Mod Menu list.
+
+- Integrated Update Checker:
+  - Non-blocking asynchronous GitHub release checker that notifies players when a new version is available.
 
 ---
 
-## 🎮 Controls & Keybindings
+## Controls and Keybindings
 
 | Key | Action | Description |
 |---|---|---|
-| **`O`** | Open eSpoty Hub | Opens the full interactive music control screen. |
-| *(Configurable)* | Play / Pause | Toggles track playback. |
-| *(Configurable)* | Next Track | Skips to the next song in your queue. |
-| *(Configurable)* | Previous Track | Skips to the previous song. |
-| *(Configurable)* | Toggle HUD | Turns the on-screen music overlay on/off. |
+| K | Open eSpoty Hub | Opens the full interactive Spotify control screen. |
+| (Unbound) | Play / Pause | Toggles track playback. |
+| (Unbound) | Next Track | Skips to the next song in your queue. |
+| (Unbound) | Previous Track | Skips to the previous song. |
+| (Unbound) | Toggle HUD | Toggles the in-game music overlay on or off. |
 
-*All keybindings can be customized in the Minecraft `Options -> Controls -> Key Binds` menu under the **eSpoty** category.*
-
----
-
-## 💬 Commands
-
-- `/espoty` — Opens the eSpoty interactive GUI.
-- `/espoty play` — Resumes Spotify playback.
-- `/espoty pause` — Pauses Spotify playback.
-- `/espoty next` — Skips to the next track.
-- `/espoty prev` — Skips to the previous track.
-- `/espoty now` — Prints the currently playing track and artist to in-game chat.
-- `/espoty login` — Starts the browser authorization flow.
-- `/espoty status` — Displays PC app status and account connection state.
+All keybindings can be customized in the Minecraft Options -> Controls -> Key Binds menu under the eSpoty category.
 
 ---
 
-## 🚀 How to Connect Spotify
+## Commands
 
-1. Launch Minecraft with the **eSpoty** mod installed in your `mods` folder.
-2. Press **`O`** or type `/espoty` to open the hub.
-3. Click **"Connect to Spotify"** in the Settings tab or on the welcome screen.
-4. Your default web browser will open with the Spotify authorization page.
-5. Click **Agree** / **Authorize**.
-6. The built-in local server receives the authorization token, and eSpoty instantly connects! You can now return to Minecraft and enjoy your music!
+- `/espoty` - Opens the eSpoty interactive player GUI.
+- `/espoty play` - Resumes Spotify playback.
+- `/espoty pause` - Pauses Spotify playback.
+- `/espoty next` - Skips to the next track.
+- `/espoty prev` - Skips to the previous track.
+- `/espoty now` - Prints the currently playing track and artist to in-game chat.
+- `/espoty status` - Displays PC app status and bridge connection state.
+- `/espoty refresh` - Forces a full reload of the local bridge session.
 
 ---
 
-## 🛠️ Building from Source
+## Getting Started
+
+1. Place the compiled `espoty-1.1.4.jar` into your Minecraft `.minecraft/mods` folder.
+2. Start your Spotify desktop application on your PC.
+3. Launch Minecraft with Fabric Loader.
+4. Press `K` (or type `/espoty`) to open the Hub. eSpoty connects automatically to your local Spotify app.
+
+---
+
+## Building from Source
 
 Requirements:
-- Java 21+ LTS
-- Fabric Loader 0.16.9+
-- Minecraft 1.21.1
+- Java 21 LTS or higher
+- Fabric Loader 0.16.0 or higher
+- Minecraft 1.21.1 / 1.21.x / 1.21.11
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/eSpoty.git
+git clone https://github.com/itzCrih/eSpoty.git
 cd eSpoty
 
 # Build the mod jar
 ./gradlew build
 ```
 
-The compiled mod jar will be in `build/libs/espoty-1.0.0.jar`.
+The compiled mod jar will be located in `build/libs/espoty-1.1.4.jar`.
+
+---
+
+## Author and License
+
+- Author: itzCrih (https://itzcrih.it)
+- Repository: https://github.com/itzCrih/eSpoty
+- License: MIT License

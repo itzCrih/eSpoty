@@ -8,7 +8,9 @@
 		"itzCrih"
 	],
 	"contact": {
-		"homepage": "https://itzcrih.it"
+		"homepage": "https://itzcrih.it",
+		"sources": "https://github.com/itzCrih/eSpoty",
+		"issues": "https://github.com/itzCrih/eSpoty/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/espoty/icon.png",

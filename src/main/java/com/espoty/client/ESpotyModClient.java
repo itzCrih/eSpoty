@@ -81,10 +81,16 @@ public class ESpotyModClient implements ClientModInitializer {
         // Register Main Menu Mini Player
         com.espoty.gui.widget.MainMenuMiniPlayer.register();
 
+        // Asynchronous non-blocking GitHub release update check
+        com.espoty.update.UpdateChecker.getInstance().checkForUpdatesAsync();
+
         // Register Client Tick (Key Handling & Audio Ducking)
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Automatic sound ducking & Minecraft music mute when Spotify plays
             com.espoty.audio.AudioDuckingManager.getInstance().tick(client);
+
+            // Notify player once in chat if an update is available
+            com.espoty.update.UpdateChecker.getInstance().checkAndNotifyInChat(client);
 
             // Open Spotify GUI via keybind (default: K) anywhere
             while (keyOpenGui.consumeClick()) {
