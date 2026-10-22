@@ -15,6 +15,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -73,9 +74,9 @@ public class ESpotyModClient implements ClientModInitializer {
                 CATEGORY_ESPOTY
         ));
 
-        // Register In-Game HUD & Celestial Sky Lyrics
+        // Register In-Game HUD & Celestial Sky Lyrics (Rendered in 3D world with depth occlusion)
         HudRenderCallback.EVENT.register(SpotifyHudRenderer::render);
-        HudRenderCallback.EVENT.register(com.espoty.gui.sky.SkyLyricsRenderer::render);
+        WorldRenderEvents.END_MAIN.register(com.espoty.gui.sky.SkyLyricsRenderer::render);
 
         // Register Main Menu Mini Player
         com.espoty.gui.widget.MainMenuMiniPlayer.register();
