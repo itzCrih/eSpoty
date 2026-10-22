@@ -3,7 +3,7 @@ param([int]$Port = 0)
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# CoreAudio Native Audio Master Controller for Smooth Volume Slider
+# CoreAudio Native Audio Master Controller with correct MMDeviceEnumerator CLSID
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -38,14 +38,15 @@ public interface IAudioEndpointVolume {
     [PreserveSig]
     int GetMasterVolumeLevelScalar(out float pfLevel);
     int SetMute(bool bMute, ref Guid pguidEventContext);
+    [PreserveSig]
     int GetMute(out bool pbMute);
 }
 
 [ComImport]
-[Guid("BCDE0395-E52F-467C-8E3D-C4579291433E")]
+[Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
 internal class MMDeviceEnumerator {}
 
-public class AudioMaster {
+public class AudioMasterReal {
     public static float Get() {
         try {
             var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
@@ -73,8 +74,28 @@ public class AudioMaster {
             aepv.SetMasterVolumeLevelScalar(vol, ref g);
         } catch {}
     }
+    public static void SetMute(bool mute) {
+        try {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
+            IMMDevice speakers;
+            enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);
+            var iid = typeof(IAudioEndpointVolume).GUID;
+            object o;
+            speakers.Activate(ref iid, 0x17, IntPtr.Zero, out o);
+            var aepv = (IAudioEndpointVolume)o;
+            Guid g = Guid.Empty;
+            aepv.SetMute(mute, ref g);
+        } catch {}
+    }
 }
 "@
+
+# Locate Spotify CLI helper bundled with Spotify Desktop
+$cliPath = Join-Path $env:APPDATA "Spotify\spotify_cli.exe"
+if (-not (Test-Path $cliPath)) {
+    $alt = Join-Path $env:LOCALAPPDATA "Spotify\spotify_cli.exe"
+    if (Test-Path $alt) { $cliPath = $alt } else { $cliPath = $null }
+}
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' }
@@ -121,15 +142,61 @@ function Get-SpotifySession {
     return $null
 }
 
+# State Cache for fast lookups
+$script:lastTrackKey = ""
+$script:currentArtUrl = ""
+$script:isLiked = $false
+$script:currentUri = ""
+$script:canShuffle = $true
+$script:canRepeat = $true
+
+function Update-SpotifyMetadata($title, $artist) {
+    if (-not $cliPath) { return }
+    try {
+        $npJson = & $cliPath now-playing --format json 2>$null | ConvertFrom-Json
+        if ($npJson -and $npJson.currently_playing -and $npJson.currently_playing.uri) {
+            $script:currentUri = $npJson.currently_playing.uri
+
+            # Query real Spotify album artwork CDN url
+            $luJson = & $cliPath lookup $script:currentUri --format json 2>$null | ConvertFrom-Json
+            if ($luJson -and $luJson.entities -and $luJson.entities.Count -gt 0) {
+                $script:currentArtUrl = $luJson.entities[0].image_url
+            }
+
+            # Query if track is in user's liked library
+            $cntJson = & $cliPath library contains $script:currentUri --format json 2>$null | ConvertFrom-Json
+            if ($cntJson -and $cntJson.contains) {
+                $script:isLiked = [bool]($cntJson.contains.($script:currentUri))
+            }
+
+            # Probe if shuffle and repeat are allowed in current context
+            $probe = & $cliPath shuffle on 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $script:canShuffle = $false
+                $script:canRepeat = $false
+            } else {
+                $script:canShuffle = $true
+                $script:canRepeat = $true
+                & $cliPath shuffle off 2>$null | Out-Null
+            }
+        }
+    } catch {}
+}
+
 if ($Port -le 0) {
     $s = Get-SpotifySession
     if ($s) {
         $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
         Write-Output "Standalone session found: $($props.Title) by $($props.Artist)"
+        Update-SpotifyMetadata $props.Title $props.Artist
+        Write-Output "Track URI: $script:currentUri"
+        Write-Output "Art URL: $script:currentArtUrl"
+        Write-Output "Liked: $script:isLiked"
+        Write-Output "CanShuffle: $script:canShuffle"
     } else {
         Write-Output "No Spotify session found"
     }
-    Write-Output "Volume is: $([math]::Round(([AudioMaster]::Get()) * 100))%"
+    Write-Output "Volume is: $([math]::Round(([AudioMasterReal]::Get()) * 100))%"
     exit 0
 }
 
@@ -141,8 +208,6 @@ try {
     $reader = New-Object System.IO.StreamReader($stream, $utf8NoBom)
 
     while ($client.Connected) {
-        $hasCommand = $false
-
         # Process any pending incoming commands from Java immediately
         while ($stream.DataAvailable) {
             $cmd = $reader.ReadLine()
@@ -153,13 +218,34 @@ try {
                 exit 0
             }
 
-            $hasCommand = $true
             try {
                 if ($cmd.StartsWith("vol:")) {
                     $vInt = [int]($cmd.Substring(4))
                     if ($vInt -lt 0) { $vInt = 0 }
                     if ($vInt -gt 100) { $vInt = 100 }
-                    [AudioMaster]::Set($vInt / 100.0)
+                    $vFloat = [math]::Round($vInt / 100.0, 2)
+
+                    # Update Spotify's internal application volume
+                    if ($cliPath) {
+                        & $cliPath volume $vFloat 2>$null | Out-Null
+                    }
+                    # Also update Windows endpoint volume
+                    [AudioMasterReal]::Set($vFloat)
+                    if ($vInt -eq 0) {
+                        [AudioMasterReal]::SetMute($true)
+                    } else {
+                        [AudioMasterReal]::SetMute($false)
+                    }
+                } elseif ($cmd -eq "togglelike") {
+                    if ($cliPath -and $script:currentUri) {
+                        if ($script:isLiked) {
+                            & $cliPath library remove $script:currentUri 2>$null | Out-Null
+                            $script:isLiked = $false
+                        } else {
+                            & $cliPath library add $script:currentUri 2>$null | Out-Null
+                            $script:isLiked = $true
+                        }
+                    }
                 } else {
                     $s = Get-SpotifySession
                     if ($s) {
@@ -177,30 +263,35 @@ try {
                             $ms = [long]($cmd.Substring(5))
                             Await ($s.TryChangePlaybackPositionAsync($ms * 10000)) ([bool]) | Out-Null
                         } elseif ($cmd -eq "shuffletoggle") {
-                            $pinfo = $s.GetPlaybackInfo()
-                            $curShuf = if ($pinfo) { $pinfo.IsShuffleActive } else { $false }
-                            Await ($s.TryChangeShuffleActiveAsync(-not $curShuf)) ([bool]) | Out-Null
-                        } elseif ($cmd -eq "repeatcycle") {
-                            $pinfo = $s.GetPlaybackInfo()
-                            $curRep = if ($pinfo -and $pinfo.AutoRepeatMode) { $pinfo.AutoRepeatMode.ToString() } else { "None" }
-                            $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::None
-                            if ($curRep -eq "None") {
-                                $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::List
-                            } elseif ($curRep -eq "List") {
-                                $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::Track
-                            } else {
-                                $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::None
+                            if ($script:canShuffle) {
+                                $pinfo = $s.GetPlaybackInfo()
+                                $curShuf = if ($pinfo) { $pinfo.IsShuffleActive } else { $false }
+                                Await ($s.TryChangeShuffleActiveAsync(-not $curShuf)) ([bool]) | Out-Null
                             }
-                            Await ($s.TryChangeAutoRepeatModeAsync($nextRep)) ([bool]) | Out-Null
+                        } elseif ($cmd -eq "repeatcycle") {
+                            if ($script:canRepeat) {
+                                $pinfo = $s.GetPlaybackInfo()
+                                $curRep = if ($pinfo -and $pinfo.AutoRepeatMode) { $pinfo.AutoRepeatMode.ToString() } else { "None" }
+                                $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::None
+                                if ($curRep -eq "None") {
+                                    $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::List
+                                } elseif ($curRep -eq "List") {
+                                    $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::Track
+                                } else {
+                                    $nextRep = [Windows.Media.MediaPlaybackAutoRepeatMode]::None
+                                }
+                                Await ($s.TryChangeAutoRepeatModeAsync($nextRep)) ([bool]) | Out-Null
+                            }
                         } elseif ($cmd -eq "refresh") {
                             $script:manager = $null
+                            $script:lastTrackKey = ""
                         }
                     }
                 }
             } catch {}
         }
 
-        # Query and send current media state with ultra-precise timeline calculation
+        # Query and send current media state
         try {
             $s = Get-SpotifySession
             if ($s) {
@@ -214,7 +305,14 @@ try {
                 $album = if ($props -and $props.AlbumTitle) { $props.AlbumTitle } else { "" }
                 $playing = if ($playback) { ($playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing) } else { $false }
                 
-                # Precise position calculation using LastUpdatedTime to eliminate timeline freezing and lyrics lag
+                # Check for track change to update Spotify CLI metadata
+                $trackKey = "$title - $artist"
+                if ($trackKey -ne $script:lastTrackKey -and $title -ne "") {
+                    $script:lastTrackKey = $trackKey
+                    Update-SpotifyMetadata $title $artist
+                }
+
+                # Precise position calculation using LastUpdatedTime
                 $nowUtc = [DateTimeOffset]::UtcNow
                 $pos = 0
                 $dur = 0
@@ -238,16 +336,14 @@ try {
                 $shuf = if ($playback) { [bool]$playback.IsShuffleActive } else { $false }
                 $rep = if ($playback -and $playback.AutoRepeatMode) { $playback.AutoRepeatMode.ToString().ToLower() } else { "none" }
 
-                # Controls capability flags reported by Spotify via Windows SMTC
+                # Controls capability flags reported by Spotify
                 $canPlay = if ($ctrls) { [bool]($ctrls.IsPlayPauseToggleEnabled -or $ctrls.IsPlayEnabled -or $ctrls.IsPauseEnabled) } else { $true }
                 $canNext = if ($ctrls) { [bool]$ctrls.IsNextEnabled } else { $true }
                 $canPrev = if ($ctrls) { [bool]$ctrls.IsPreviousEnabled } else { $true }
-                $canShuf = if ($ctrls) { [bool]$ctrls.IsShuffleEnabled } else { $true }
-                $canRep  = if ($ctrls) { [bool]$ctrls.IsRepeatEnabled } else { $true }
                 $canSeek = if ($ctrls) { [bool]$ctrls.IsPlaybackPositionEnabled } else { $true }
 
-                # Read current audio master volume percent
-                $curVol = [math]::Round(([AudioMaster]::Get()) * 100)
+                # Read current audio volume percent
+                $curVol = [math]::Round(([AudioMasterReal]::Get()) * 100)
 
                 $obj = [PSCustomObject]@{
                     running = $true
@@ -260,18 +356,20 @@ try {
                     shuffle = $shuf
                     repeat = $rep
                     vol = $curVol
+                    art = $script:currentArtUrl
+                    liked = $script:isLiked
                     canPlayPause = $canPlay
                     canNext = $canNext
                     canPrev = $canPrev
-                    canShuffle = $canShuf
-                    canRepeat = $canRep
+                    canShuffle = $script:canShuffle
+                    canRepeat = $script:canRepeat
                     canSeek = $canSeek
                 }
                 $json = ConvertTo-Json -Compress $obj
                 $writer.WriteLine($json)
                 $writer.Flush()
             } else {
-                $curVol = [math]::Round(([AudioMaster]::Get()) * 100)
+                $curVol = [math]::Round(([AudioMasterReal]::Get()) * 100)
                 $writer.WriteLine('{"running":false,"vol":' + $curVol + '}')
                 $writer.Flush()
             }
@@ -280,7 +378,7 @@ try {
             $writer.Flush()
         }
 
-        # Smooth high-performance polling interval (150ms for instant responsiveness without lag)
+        # Polling interval
         Start-Sleep -Milliseconds 150
     }
 } catch {

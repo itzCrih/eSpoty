@@ -138,7 +138,7 @@ public class LyricsManager {
 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.1")
+                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.2")
                         .timeout(Duration.ofSeconds(6))
                         .GET()
                         .build();

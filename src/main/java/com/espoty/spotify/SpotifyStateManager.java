@@ -29,6 +29,7 @@ public class SpotifyStateManager {
     private String currentArtworkUrl = "";
     private String lastTrackKey = "";
     private long lastTrackChangeTime = 0;
+    private boolean isLikedOnSpotify = false;
 
     private final List<Consumer<PlaybackState>> trackChangeListeners = new ArrayList<>();
 
@@ -94,7 +95,8 @@ public class SpotifyStateManager {
      */
     public synchronized void updateLocalState(boolean running, String title, String artist, String album,
                                              long pos, long dur, boolean playing, boolean shuffle, String repeat,
-                                             int volumePercent, boolean canPlayPause, boolean canNext, boolean canPrev,
+                                             int volumePercent, String artUrl, boolean liked,
+                                             boolean canPlayPause, boolean canNext, boolean canPrev,
                                              boolean canShuffle, boolean canRepeat, boolean canSeek) {
         this.isSpotifyRunning = running;
 
@@ -107,58 +109,33 @@ public class SpotifyStateManager {
 
         String trackKey = title + " - " + artist;
         boolean changed = !trackKey.equals(this.lastTrackKey);
+        this.isLikedOnSpotify = liked;
 
         if (changed) {
             this.lastTrackKey = trackKey;
             this.lastTrackChangeTime = System.currentTimeMillis();
-            this.currentArtworkUrl = "";
-
-            // Automatically query 600x600 HD artwork via iTunes Public API
-            ArtworkFinder.getInstance().findArtworkUrl(title, artist).thenAccept(artUrl -> {
-                synchronized (SpotifyStateManager.this) {
-                    this.currentArtworkUrl = artUrl;
-                    if (!artUrl.isEmpty()) {
-                        AlbumArtManager.getInstance().getAlbumTexture(artUrl);
+            if (artUrl != null && !artUrl.isEmpty()) {
+                this.currentArtworkUrl = artUrl;
+                AlbumArtManager.getInstance().getAlbumTexture(artUrl);
+            } else {
+                this.currentArtworkUrl = "";
+                // Fallback to iTunes query if not provided by CLI
+                ArtworkFinder.getInstance().findArtworkUrl(title, artist).thenAccept(foundArt -> {
+                    synchronized (SpotifyStateManager.this) {
+                        if (foundArt != null && !foundArt.isEmpty()) {
+                            this.currentArtworkUrl = foundArt;
+                            AlbumArtManager.getInstance().getAlbumTexture(foundArt);
+                        }
                     }
-                    if (this.currentState != null && this.lastTrackKey.equals(trackKey)) {
-                        this.currentState = new PlaybackState(
-                                this.currentState.getTrackId(),
-                                this.currentState.getTrackName(),
-                                this.currentState.getArtistNames(),
-                                this.currentState.getAlbumName(),
-                                artUrl,
-                                this.currentState.getDurationMs(),
-                                this.currentState.getProgressMs(),
-                                this.currentState.isPlaying(),
-                                this.currentState.isShuffleState(),
-                                this.currentState.getRepeatState(),
-                                this.currentState.getVolumePercent(),
-                                this.currentState.getDeviceName(),
-                                this.currentState.getDeviceType(),
-                                this.currentState.canPlayPause(),
-                                this.currentState.canNext(),
-                                this.currentState.canPrev(),
-                                this.currentState.canShuffle(),
-                                this.currentState.canRepeat(),
-                                this.currentState.canSeek()
-                        );
-                    }
-                }
-            });
+                });
+            }
+        } else if ((this.currentArtworkUrl.isEmpty() || !this.currentArtworkUrl.equals(artUrl)) && artUrl != null && !artUrl.isEmpty()) {
+            this.currentArtworkUrl = artUrl;
+            AlbumArtManager.getInstance().getAlbumTexture(artUrl);
         }
 
-        long currentInterpolated = getInterpolatedProgressMs();
-        boolean playingChanged = (this.currentState == null || this.currentState.isPlaying() != playing);
-        boolean outOfSync = Math.abs(currentInterpolated - pos) > 800;
-
-        long effectiveProgress;
-        if (changed || playingChanged || outOfSync || !playing) {
-            this.stateFetchTimestamp = System.currentTimeMillis();
-            effectiveProgress = pos;
-        } else {
-            // Retain client-side sub-frame interpolation for buttery smooth 60 FPS HUD and lyrics
-            effectiveProgress = currentInterpolated;
-        }
+        // Anchor progress directly to packet timestamp for smooth, monotonically increasing 60 FPS playback
+        this.stateFetchTimestamp = System.currentTimeMillis();
 
         this.currentState = new PlaybackState(
                 "local_" + trackKey.hashCode(),
@@ -167,7 +144,7 @@ public class SpotifyStateManager {
                 album,
                 this.currentArtworkUrl,
                 dur,
-                effectiveProgress,
+                pos,
                 playing,
                 shuffle,
                 repeat,
@@ -326,17 +303,17 @@ public class SpotifyStateManager {
     }
 
     public boolean isCurrentTrackLiked() {
-        PlaybackState s = currentState;
-        if (s == null) return false;
-        String key = s.getTrackName() + " - " + s.getArtistNames();
-        return com.espoty.config.ModConfig.getInstance().isTrackLiked(key);
+        return this.isLikedOnSpotify;
     }
 
     public boolean toggleCurrentTrackLiked() {
-        PlaybackState s = currentState;
-        if (s == null) return false;
-        String key = s.getTrackName() + " - " + s.getArtistNames();
-        return com.espoty.config.ModConfig.getInstance().toggleTrackLiked(key);
+        windowsBridge.sendCommand("togglelike");
+        this.isLikedOnSpotify = !this.isLikedOnSpotify;
+        if (currentState != null) {
+            String key = currentState.getTrackName() + " - " + currentState.getArtistNames();
+            com.espoty.config.ModConfig.getInstance().toggleTrackLiked(key);
+        }
+        return this.isLikedOnSpotify;
     }
 
     public void shutdown() {

@@ -107,7 +107,7 @@ public class SpotifyHudRenderer {
         int titleY = y + 8;
 
         // Animated Equalizer Visualizer Bars & Liked Heart
-        boolean isLiked = config.isTrackLiked(state.getTrackName() + " - " + state.getArtistNames());
+        boolean isLiked = stateManager.isCurrentTrackLiked();
         if (isLiked) {
             guiGraphics.drawString(font, "❤", x + cardWidth - 36, titleY, 0xFFFFD700, true);
         }

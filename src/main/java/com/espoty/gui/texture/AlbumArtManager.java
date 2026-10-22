@@ -31,6 +31,7 @@ public class AlbumArtManager {
 
     private AlbumArtManager() {
         this.httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(6))
                 .build();
     }
@@ -67,7 +68,7 @@ public class AlbumArtManager {
                             try {
                                 NativeImage image = NativeImage.read(new ByteArrayInputStream(data));
                                 DynamicTexture dynamicTexture = new DynamicTexture(() -> "espoty_album", image);
-                                String hash = Integer.toHexString(url.hashCode());
+                                String hash = Long.toHexString(url.hashCode() & 0xFFFFFFFFL);
                                 Identifier loc = Identifier.fromNamespaceAndPath(ESpotyMod.MOD_ID, "album_" + hash);
                                 Minecraft.getInstance().getTextureManager().register(loc, dynamicTexture);
                                 textureMap.put(url, loc);

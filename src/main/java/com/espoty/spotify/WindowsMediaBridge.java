@@ -127,7 +127,7 @@ public class WindowsMediaBridge {
         int vol = json.has("vol") ? json.get("vol").getAsInt() : 100;
 
         if (!running) {
-            SpotifyStateManager.getInstance().updateLocalState(false, "", "", "", 0, 0, false, false, "none", vol, true, true, true, true, true, true);
+            SpotifyStateManager.getInstance().updateLocalState(false, "", "", "", 0, 0, false, false, "none", vol, "", false, true, true, true, true, true, true);
             return;
         }
 
@@ -139,6 +139,8 @@ public class WindowsMediaBridge {
         boolean playing = json.has("playing") && json.get("playing").getAsBoolean();
         boolean shuffle = json.has("shuffle") && json.get("shuffle").getAsBoolean();
         String repeat = json.has("repeat") ? json.get("repeat").getAsString() : "none";
+        String art = json.has("art") ? json.get("art").getAsString() : "";
+        boolean liked = json.has("liked") && json.get("liked").getAsBoolean();
 
         boolean canPlayPause = !json.has("canPlayPause") || json.get("canPlayPause").getAsBoolean();
         boolean canNext = !json.has("canNext") || json.get("canNext").getAsBoolean();
@@ -148,7 +150,7 @@ public class WindowsMediaBridge {
         boolean canSeek = !json.has("canSeek") || json.get("canSeek").getAsBoolean();
 
         SpotifyStateManager.getInstance().updateLocalState(
-                true, title, artist, album, pos, dur, playing, shuffle, repeat, vol,
+                true, title, artist, album, pos, dur, playing, shuffle, repeat, vol, art, liked,
                 canPlayPause, canNext, canPrev, canShuffle, canRepeat, canSeek
         );
     }
