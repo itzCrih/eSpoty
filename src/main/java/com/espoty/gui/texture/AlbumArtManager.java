@@ -6,7 +6,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -56,6 +59,7 @@ public class AlbumArtManager {
     private void loadAsync(String url) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .header("User-Agent", "eSpoty Minecraft Mod/1.0.3")
                 .timeout(Duration.ofSeconds(8))
                 .GET()
                 .build();
@@ -63,10 +67,26 @@ public class AlbumArtManager {
         httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
                 .thenAccept(response -> {
                     if (response.statusCode() == 200 && response.body() != null) {
-                        byte[] data = response.body();
+                        byte[] rawBytes = response.body();
+                        // Re-encode JPEG/WebP to clean PNG in background worker to satisfy NativeImage's strict PNG requirement
+                        byte[] pngBytes = rawBytes;
+                        try {
+                            if (rawBytes.length > 3 && (rawBytes[0] != (byte) 0x89 || rawBytes[1] != (byte) 0x50)) {
+                                BufferedImage bImg = ImageIO.read(new ByteArrayInputStream(rawBytes));
+                                if (bImg != null) {
+                                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                    ImageIO.write(bImg, "png", baos);
+                                    pngBytes = baos.toByteArray();
+                                }
+                            }
+                        } catch (Exception e) {
+                            ESpotyMod.LOGGER.debug("Image re-encoding note: {}", e.getMessage());
+                        }
+
+                        final byte[] finalPng = pngBytes;
                         Minecraft.getInstance().execute(() -> {
                             try {
-                                NativeImage image = NativeImage.read(new ByteArrayInputStream(data));
+                                NativeImage image = NativeImage.read(new ByteArrayInputStream(finalPng));
                                 DynamicTexture dynamicTexture = new DynamicTexture(() -> "espoty_album", image);
                                 String hash = Long.toHexString(url.hashCode() & 0xFFFFFFFFL);
                                 Identifier loc = Identifier.fromNamespaceAndPath(ESpotyMod.MOD_ID, "album_" + hash);

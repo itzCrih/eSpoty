@@ -149,6 +149,23 @@ $script:isLiked = $false
 $script:currentUri = ""
 $script:canShuffle = $true
 $script:canRepeat = $true
+$script:currentVolume = 80
+$script:volCheckCounter = 0
+
+# Read initial active volume from Spotify
+if ($cliPath) {
+    try {
+        $dev = & $cliPath devices --format json 2>$null | ConvertFrom-Json
+        if ($dev -and $dev.devices) {
+            foreach ($d in $dev.devices) {
+                if ($d.is_active -and $null -ne $d.volume) {
+                    $script:currentVolume = [int]$d.volume
+                    break
+                }
+            }
+        }
+    } catch {}
+}
 
 function Update-SpotifyMetadata($title, $artist) {
     if (-not $cliPath) { return }
@@ -157,10 +174,13 @@ function Update-SpotifyMetadata($title, $artist) {
         if ($npJson -and $npJson.currently_playing -and $npJson.currently_playing.uri) {
             $script:currentUri = $npJson.currently_playing.uri
 
-            # Query real Spotify album artwork CDN url
+            # Query real Spotify album artwork CDN url and upgrade to 640x640 HD
             $luJson = & $cliPath lookup $script:currentUri --format json 2>$null | ConvertFrom-Json
             if ($luJson -and $luJson.entities -and $luJson.entities.Count -gt 0) {
-                $script:currentArtUrl = $luJson.entities[0].image_url
+                $rawArt = $luJson.entities[0].image_url
+                if ($rawArt) {
+                    $script:currentArtUrl = $rawArt.Replace("ab67616d00004851", "ab67616d0000b273").Replace("ab67616d00001e02", "ab67616d0000b273")
+                }
             }
 
             # Query if track is in user's liked library
@@ -169,7 +189,9 @@ function Update-SpotifyMetadata($title, $artist) {
                 $script:isLiked = [bool]($cntJson.contains.($script:currentUri))
             }
 
-            # Probe if shuffle and repeat are allowed in current context
+            # Probe if shuffle and repeat are allowed in current context safely
+            $sSession = Get-SpotifySession
+            $wasShuf = if ($sSession) { ($sSession.GetPlaybackInfo()).IsShuffleActive } else { $false }
             $probe = & $cliPath shuffle on 2>&1
             if ($LASTEXITCODE -ne 0) {
                 $script:canShuffle = $false
@@ -177,7 +199,9 @@ function Update-SpotifyMetadata($title, $artist) {
             } else {
                 $script:canShuffle = $true
                 $script:canRepeat = $true
-                & $cliPath shuffle off 2>$null | Out-Null
+                if (-not $wasShuf) {
+                    & $cliPath shuffle off 2>$null | Out-Null
+                }
             }
         }
     } catch {}
@@ -223,6 +247,8 @@ try {
                     $vInt = [int]($cmd.Substring(4))
                     if ($vInt -lt 0) { $vInt = 0 }
                     if ($vInt -gt 100) { $vInt = 100 }
+                    $script:currentVolume = $vInt
+                    $script:volCheckCounter = 0
                     $vFloat = [math]::Round($vInt / 100.0, 2)
 
                     # Update Spotify's internal application volume
@@ -342,8 +368,22 @@ try {
                 $canPrev = if ($ctrls) { [bool]$ctrls.IsPreviousEnabled } else { $true }
                 $canSeek = if ($ctrls) { [bool]$ctrls.IsPlaybackPositionEnabled } else { $true }
 
-                # Read current audio volume percent
-                $curVol = [math]::Round(([AudioMasterReal]::Get()) * 100)
+                # Periodically re-sync with active Spotify device volume (every ~30 ticks / 4.5s)
+                $script:volCheckCounter++
+                if ($script:volCheckCounter -ge 30 -and $cliPath) {
+                    $script:volCheckCounter = 0
+                    try {
+                        $dev = & $cliPath devices --format json 2>$null | ConvertFrom-Json
+                        if ($dev -and $dev.devices) {
+                            foreach ($d in $dev.devices) {
+                                if ($d.is_active -and $null -ne $d.volume) {
+                                    $script:currentVolume = [int]$d.volume
+                                    break
+                                }
+                            }
+                        }
+                    } catch {}
+                }
 
                 $obj = [PSCustomObject]@{
                     running = $true
@@ -355,7 +395,7 @@ try {
                     playing = $playing
                     shuffle = $shuf
                     repeat = $rep
-                    vol = $curVol
+                    vol = $script:currentVolume
                     art = $script:currentArtUrl
                     liked = $script:isLiked
                     canPlayPause = $canPlay
@@ -369,8 +409,7 @@ try {
                 $writer.WriteLine($json)
                 $writer.Flush()
             } else {
-                $curVol = [math]::Round(([AudioMasterReal]::Get()) * 100)
-                $writer.WriteLine('{"running":false,"vol":' + $curVol + '}')
+                $writer.WriteLine('{"running":false,"vol":' + $script:currentVolume + '}')
                 $writer.Flush()
             }
         } catch {

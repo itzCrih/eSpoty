@@ -244,7 +244,7 @@ public class SpotifyScreen extends Screen {
         }
 
         // Device & Link Tag
-        guiGraphics.drawString(this.font, "💻 Spotify Desktop (Zero Login)", infoX, contentY + 54, 0xFFE5A910, true);
+        guiGraphics.drawString(this.font, "💻 Spotify Desktop", infoX, contentY + 54, 0xFFE5A910, true);
 
         // 3. Thick Modern Seek Bar
         int seekY = contentY + 84;
@@ -338,7 +338,7 @@ public class SpotifyScreen extends Screen {
         int volStartX = centerX - 80;
         int volBarX = volStartX + 18;
 
-        int curVol = isDraggingVolume ? (int) (dragVolumeRatio * 100) : (state.getVolumePercent() > 0 ? state.getVolumePercent() : config.getVolume());
+        int curVol = isDraggingVolume ? (int) (dragVolumeRatio * 100) : (state.getVolumePercent() >= 0 ? state.getVolumePercent() : config.getVolume());
         curVol = Math.max(0, Math.min(100, curVol));
 
         // Speaker Icon
@@ -533,7 +533,7 @@ public class SpotifyScreen extends Screen {
         guiGraphics.fill(contentX, row5Y + 6, contentX + 170, row5Y + 28, reloadHover ? 0xFFFFF176 : 0xFFFFD700);
         guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 85, row5Y + 13, 0xFF101018);
 
-        guiGraphics.drawString(this.font, "Zero login required. Connects directly to Spotify PC.", contentX, row5Y + 34, 0xFFAAAAAA, true);
+        guiGraphics.drawString(this.font, "Connects directly to Spotify PC.", contentX, row5Y + 34, 0xFFAAAAAA, true);
     }
 
     private void renderSettingsPill(GuiGraphics guiGraphics, String text, int x, int y, int w, int h, boolean hover) {
@@ -685,7 +685,7 @@ public class SpotifyScreen extends Screen {
 
         // Speaker Mute Toggle Click
         if (isMouseOver(mx, my, volStartX - 4, volY - 4, 18, 16)) {
-            int curVol = state.getVolumePercent() > 0 ? state.getVolumePercent() : config.getVolume();
+            int curVol = state.getVolumePercent() >= 0 ? state.getVolumePercent() : config.getVolume();
             int newVol = (curVol > 0) ? 0 : 75;
             stateManager.setVolume(newVol);
             setStatus(newVol == 0 ? "Muted 🔇" : "Volume: " + newVol + "% 🔊");
