@@ -91,6 +91,22 @@ public class LyricsManager {
             int idx = getActiveIndex(progressMs);
             return (idx >= 0 && idx < lines.size()) ? lines.get(idx) : null;
         }
+
+        public LyricLine getNextLine(long progressMs) {
+            int idx = getActiveIndex(progressMs);
+            if (idx >= 0 && idx + 1 < lines.size()) {
+                return lines.get(idx + 1);
+            }
+            return null;
+        }
+
+        public LyricLine getPreviousLine(long progressMs) {
+            int idx = getActiveIndex(progressMs);
+            if (idx > 0 && idx - 1 < lines.size()) {
+                return lines.get(idx - 1);
+            }
+            return null;
+        }
     }
 
     public void updateForTrack(PlaybackState state) {
@@ -138,7 +154,7 @@ public class LyricsManager {
 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.6")
+                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.7")
                         .timeout(Duration.ofSeconds(6))
                         .GET()
                         .build();
@@ -212,5 +228,15 @@ public class LyricsManager {
     public LyricLine getActiveLyricLine(long progressMs) {
         if (currentLyrics == null) return null;
         return currentLyrics.getActiveLine(progressMs);
+    }
+
+    public LyricLine getNextLyricLine(long progressMs) {
+        if (currentLyrics == null) return null;
+        return currentLyrics.getNextLine(progressMs);
+    }
+
+    public LyricLine getPreviousLyricLine(long progressMs) {
+        if (currentLyrics == null) return null;
+        return currentLyrics.getPreviousLine(progressMs);
     }
 }

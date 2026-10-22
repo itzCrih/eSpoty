@@ -47,6 +47,7 @@ public class ModConfig {
     private boolean hudCompact = false;
     private boolean hudAutoHide = false;
     private int hudAutoHideSeconds = 8;
+    private boolean skyLyricsEnabled = true;
     private float hudScale = 1.0f;
     private float hudOpacity = 0.85f;
     private String customClientId = "";
@@ -178,6 +179,15 @@ public class ModConfig {
 
     public void setHudAutoHideSeconds(int hudAutoHideSeconds) {
         this.hudAutoHideSeconds = hudAutoHideSeconds;
+        save();
+    }
+
+    public boolean isSkyLyricsEnabled() {
+        return skyLyricsEnabled;
+    }
+
+    public void setSkyLyricsEnabled(boolean skyLyricsEnabled) {
+        this.skyLyricsEnabled = skyLyricsEnabled;
         save();
     }
 

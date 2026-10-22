@@ -76,6 +76,9 @@ public class ESpotyModClient implements ClientModInitializer {
         // Register In-Game HUD
         HudRenderCallback.EVENT.register(SpotifyHudRenderer::render);
 
+        // Register Celestial Sky Lyrics
+        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES.register(com.espoty.gui.sky.SkyLyricsRenderer::render);
+
         // Register Main Menu Mini Player
         com.espoty.gui.widget.MainMenuMiniPlayer.register();
 
