@@ -41,7 +41,7 @@ public class ESpotyModClient implements ClientModInitializer {
         // Register Keybindings
         keyOpenGui = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.espoty.open",
-                GLFW.GLFW_KEY_O,
+                GLFW.GLFW_KEY_K,
                 CATEGORY_ESPOTY
         ));
 
@@ -72,13 +72,20 @@ public class ESpotyModClient implements ClientModInitializer {
         // Register In-Game HUD
         HudRenderCallback.EVENT.register(SpotifyHudRenderer::render);
 
-        // Register Client Tick (Key Handling)
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null) return;
+        // Register Main Menu Mini Player
+        com.espoty.gui.widget.MainMenuMiniPlayer.register();
 
+        // Register Client Tick (Key Handling & Audio Ducking)
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            // Automatic sound ducking & Minecraft music mute when Spotify plays
+            com.espoty.audio.AudioDuckingManager.getInstance().tick(client);
+
+            // Open Spotify GUI via keybind (default: K) anywhere
             while (keyOpenGui.consumeClick()) {
                 client.setScreen(new SpotifyScreen());
             }
+
+            if (client.player == null) return;
 
             while (keyPlayPause.consumeClick()) {
                 stateManager.togglePlayPause();
@@ -154,6 +161,7 @@ public class ESpotyModClient implements ClientModInitializer {
 
         // Shutdown hook
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            com.espoty.audio.AudioDuckingManager.getInstance().restore(client);
             stateManager.shutdown();
         });
     }

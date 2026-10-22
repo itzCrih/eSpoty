@@ -46,12 +46,14 @@ public class ModConfig {
     private boolean hudShowLyrics = true;
     private boolean hudCompact = false;
     private boolean hudAutoHide = false;
-    private int hudAutoHideSeconds = 5;
+    private int hudAutoHideSeconds = 8;
     private float hudScale = 1.0f;
     private String customClientId = "";
     private int volume = 80;
     private int volumeStep = 5;
     private boolean showChatFeedback = true;
+    private boolean audioDuckingEnabled = true;
+    private float duckingMultiplier = 0.35f;
     private Set<String> likedTracks = new HashSet<>();
 
     // Theme Color Palette (Royal Gold & Neon Yellow)
@@ -220,6 +222,24 @@ public class ModConfig {
 
     public void setShowChatFeedback(boolean showChatFeedback) {
         this.showChatFeedback = showChatFeedback;
+        save();
+    }
+
+    public boolean isAudioDuckingEnabled() {
+        return audioDuckingEnabled;
+    }
+
+    public void setAudioDuckingEnabled(boolean audioDuckingEnabled) {
+        this.audioDuckingEnabled = audioDuckingEnabled;
+        save();
+    }
+
+    public float getDuckingMultiplier() {
+        return duckingMultiplier;
+    }
+
+    public void setDuckingMultiplier(float duckingMultiplier) {
+        this.duckingMultiplier = Math.max(0.05f, Math.min(1.0f, duckingMultiplier));
         save();
     }
 

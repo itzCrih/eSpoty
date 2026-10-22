@@ -2,6 +2,7 @@ package com.espoty.gui.screen;
 
 import com.espoty.config.ModConfig;
 import com.espoty.gui.texture.AlbumArtManager;
+import com.espoty.gui.widget.AudioWaveformRenderer;
 import com.espoty.lyrics.LyricLine;
 import com.espoty.lyrics.LyricsManager;
 import com.espoty.spotify.SpotifyProcessDetector;
@@ -51,6 +52,7 @@ public class SpotifyScreen extends Screen {
     private int queueScrollY = 0;
     private String statusMessage = "";
     private long statusMessageTime = 0;
+    private long openTime = System.currentTimeMillis();
 
     public SpotifyScreen() {
         super(Component.literal("eSpoty"));
@@ -61,6 +63,7 @@ public class SpotifyScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        this.openTime = System.currentTimeMillis();
         this.modalWidth = Math.min(390, this.width - 20);
         this.modalHeight = Math.min(270, this.height - 20);
         this.modalX = (this.width - this.modalWidth) / 2;
@@ -83,6 +86,19 @@ public class SpotifyScreen extends Screen {
         // 1. Dark Vignette Backdrop
         guiGraphics.fill(0, 0, this.width, this.height, 0x99000000);
 
+        // Smooth Scale-in Pop Animation for the modal
+        long elapsed = now - openTime;
+        float animProgress = Math.min(1.0f, elapsed / 220.0f);
+        float scale = 0.88f + (0.12f * (1.0f - (float) Math.pow(1.0f - animProgress, 3)));
+
+        int cx = modalX + (modalWidth / 2);
+        int cy = modalY + (modalHeight / 2);
+
+        guiGraphics.pose().pushMatrix();
+        guiGraphics.pose().translate((float) cx, (float) cy);
+        guiGraphics.pose().scale(scale, scale);
+        guiGraphics.pose().translate((float) -cx, (float) -cy);
+
         // 2. Modal Frame with Drop Shadow & Cyber-Gold Border
         renderModernModalFrame(guiGraphics);
 
@@ -101,6 +117,8 @@ public class SpotifyScreen extends Screen {
         if (!statusMessage.isEmpty() && now - statusMessageTime < 3500) {
             renderStatusBanner(guiGraphics);
         }
+
+        guiGraphics.pose().popMatrix();
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
@@ -246,6 +264,9 @@ public class SpotifyScreen extends Screen {
         // Device & Link Tag
         guiGraphics.drawString(this.font, "💻 Spotify Desktop", infoX, contentY + 54, 0xFFE5A910, true);
 
+        // Modern Dynamic Audio Waveform Visualizer
+        AudioWaveformRenderer.renderWaveform(guiGraphics, infoX + 112, contentY + 66, 120, 15, 20, state.isPlaying(), now, 1.0f);
+
         // 3. Thick Modern Seek Bar
         int seekY = contentY + 84;
         int seekW = modalWidth - 32;
@@ -306,6 +327,13 @@ public class SpotifyScreen extends Screen {
         String playIcon = state.isPlaying() ? "❚❚" : "▶";
 
         if (canPlay) {
+            // Pulsing gold halo when music is playing
+            if (state.isPlaying()) {
+                double pulse = Math.sin(now / 180.0) * 0.5 + 0.5;
+                int haloAlpha = (int) (50 + (pulse * 65));
+                int haloColor = (haloAlpha << 24) | 0x00FFD700;
+                guiGraphics.fill(playX - 3, controlsY - 5, playX + playW + 3, controlsY + playH + 3, haloColor);
+            }
             guiGraphics.fill(playX - 1, controlsY - 3, playX + playW + 1, controlsY + playH + 1, playHover ? 0xFFFFF59D : 0xFFFFD700);
             guiGraphics.fill(playX, controlsY - 2, playX + playW, controlsY + playH, playHover ? 0xFFFFE082 : 0xFFFFD700);
             guiGraphics.drawCenteredString(this.font, playIcon, playX + (playW / 2), controlsY + 6, 0xFF101018);
@@ -523,17 +551,23 @@ public class SpotifyScreen extends Screen {
         int row4Y = contentY + 72;
         guiGraphics.drawString(this.font, "Auto-Hide HUD:", contentX, row4Y + 5, 0xFFFFD700, true);
         boolean autoHideHover = isMouseOver(mouseX, mouseY, posBtnX, row4Y, btnW, btnH);
-        renderSettingsPill(guiGraphics, config.isHudAutoHide() ? "✔ Enabled" : "✕ Disabled", posBtnX, row4Y, btnW, btnH, autoHideHover);
+        renderSettingsPill(guiGraphics, config.isHudAutoHide() ? "✔ Enabled (8s)" : "✕ Disabled", posBtnX, row4Y, btnW, btnH, autoHideHover);
 
-        // 5. Force Refresh Bridge Button
-        int row5Y = contentY + 104;
-        guiGraphics.fill(contentX, row5Y - 4, modalX + modalWidth - 16, row5Y - 3, 0x33FFD700);
+        // 5. MC Sound Ducking & Music Mute
+        int row5Y = contentY + 96;
+        guiGraphics.drawString(this.font, "MC Sound Ducking:", contentX, row5Y + 5, 0xFFFFD700, true);
+        boolean duckHover = isMouseOver(mouseX, mouseY, posBtnX, row5Y, btnW, btnH);
+        renderSettingsPill(guiGraphics, config.isAudioDuckingEnabled() ? "✔ Auto-Mute Music" : "✕ Disabled", posBtnX, row5Y, btnW, btnH, duckHover);
 
-        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row5Y + 6, 170, 22);
-        guiGraphics.fill(contentX, row5Y + 6, contentX + 170, row5Y + 28, reloadHover ? 0xFFFFF176 : 0xFFFFD700);
-        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 85, row5Y + 13, 0xFF101018);
+        // 6. Force Refresh Bridge Button
+        int row6Y = contentY + 128;
+        guiGraphics.fill(contentX, row6Y - 4, modalX + modalWidth - 16, row6Y - 3, 0x33FFD700);
 
-        guiGraphics.drawString(this.font, "Connects directly to Spotify PC.", contentX, row5Y + 34, 0xFFAAAAAA, true);
+        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, row6Y + 6, 170, 22);
+        guiGraphics.fill(contentX, row6Y + 6, contentX + 170, row6Y + 28, reloadHover ? 0xFFFFF176 : 0xFFFFD700);
+        guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 85, row6Y + 13, 0xFF101018);
+
+        guiGraphics.drawString(this.font, "Connects directly to Spotify PC.", contentX, row6Y + 34, 0xFFAAAAAA, true);
     }
 
     private void renderSettingsPill(GuiGraphics guiGraphics, String text, int x, int y, int w, int h, boolean hover) {
@@ -748,9 +782,16 @@ public class SpotifyScreen extends Screen {
             return;
         }
 
+        // MC Sound Ducking toggle
+        int row5Y = contentY + 96;
+        if (isMouseOver(mx, my, posBtnX, row5Y, btnW, btnH)) {
+            config.setAudioDuckingEnabled(!config.isAudioDuckingEnabled());
+            return;
+        }
+
         // Reload bridge
-        int row5Y = contentY + 104;
-        if (isMouseOver(mx, my, contentX, row5Y + 6, 170, 22)) {
+        int row6Y = contentY + 128;
+        if (isMouseOver(mx, my, contentX, row6Y + 6, 170, 22)) {
             stateManager.fullReload();
             setStatus("Bridge Reloaded!");
         }
