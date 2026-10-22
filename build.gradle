@@ -6,6 +6,10 @@ plugins {
 repositories {
 	mavenCentral()
 	maven {
+		name = "Modrinth"
+		url = "https://api.modrinth.com/maven"
+	}
+	maven {
 		name = "TerraformersMC"
 		url = "https://maven.terraformersmc.com/releases/"
 	}
@@ -21,7 +25,7 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	modCompileOnly "com.terraformersmc:modmenu:17.0.1"
+	modCompileOnly "maven.modrinth:modmenu:17.0.1"
 }
 
 processResources {
