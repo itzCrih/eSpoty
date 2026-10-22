@@ -62,7 +62,7 @@ public class ArtworkFinder {
 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.7")
+                        .header("User-Agent", "eSpoty Minecraft Mod/1.0.8")
                         .timeout(Duration.ofSeconds(6))
                         .GET()
                         .build();

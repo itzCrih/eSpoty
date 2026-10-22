@@ -5,27 +5,28 @@ import com.espoty.lyrics.LyricLine;
 import com.espoty.lyrics.LyricsManager;
 import com.espoty.spotify.SpotifyStateManager;
 import com.espoty.spotify.models.PlaybackState;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.world.phys.HitResult;
 
 /**
- * Renders Spotify lyrics as a celestial, glowing aurora banner in the Minecraft sky.
- * Anchored to the heavens, with pitch-based starlight fade, smooth cosmic inertia,
+ * Projects Spotify lyrics into the Minecraft sky as an ethereal celestial aurora banner.
+ * Uses 3D-to-2D celestial sky projection with smooth cosmic inertia, obstacle raycasting,
  * and glowing Royal Gold & Neon Yellow typography.
  */
 public class SkyLyricsRenderer {
 
     private static float smoothYaw = 0f;
     private static float smoothPitch = 0f;
-    private static float skyAccessAlpha = 0f;
+    private static float currentSkyAlpha = 0f;
     private static String lastLyricText = "";
     private static long lastLyricChangeTime = 0;
+    private static boolean initialized = false;
 
-    public static void render(WorldRenderContext context) {
+    public static void render(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
 
@@ -41,65 +42,81 @@ public class SkyLyricsRenderer {
         Camera camera = mc.gameRenderer.getMainCamera();
         if (camera == null) return;
 
-        // 1. Sky Access Check: fades out if player is deep in a cave under solid blocks
-        boolean canSeeSky = (mc.level != null && mc.player != null && mc.level.canSeeSky(mc.player.blockPosition()));
-        skyAccessAlpha += ((canSeeSky ? 1.0f : 0.0f) - skyAccessAlpha) * 0.12f;
-        if (skyAccessAlpha < 0.01f) return;
-
-        // 2. Pitch / Elevation Fade:
-        // When looking at horizon (pitch >= 0), lyrics are invisible so they never obstruct gameplay.
-        // As player tilts head up into the sky (-pitch), lyrics smoothly illuminate the heavens.
-        float pitch = camera.xRot(); // -90 (zenith) to +90 (ground)
+        float pitch = camera.xRot(); // -90 (zenith) to +90 (nadir), 0 (horizon)
         float yaw = camera.yRot();
 
-        float lookUpAngle = -pitch;
-        float skyFactor;
-        if (lookUpAngle <= 4.0f) {
-            skyFactor = 0.0f;
-        } else if (lookUpAngle >= 32.0f) {
-            skyFactor = 1.0f;
-        } else {
-            skyFactor = (lookUpAngle - 4.0f) / 28.0f;
+        if (!initialized) {
+            smoothYaw = yaw;
+            smoothPitch = pitch;
+            initialized = true;
         }
-        skyFactor = skyFactor * skyFactor; // Smooth quadratic ease in
 
-        float totalAlpha = skyFactor * skyAccessAlpha;
-        if (totalAlpha < 0.01f) return;
+        // 1. Ceiling / Obstruction check via raycast
+        boolean isObstructed = false;
+        if (mc.player != null) {
+            HitResult hit = mc.player.pick(40.0D, 1.0F, false);
+            if (hit != null && hit.getType() == HitResult.Type.BLOCK && pitch < -5.0f) {
+                isObstructed = true;
+            }
+        }
 
-        // 3. Smooth Cosmic Inertia: gentle easing so quick mouse twitches don't vibrate the sky banner
-        smoothYaw += (yaw - smoothYaw) * 0.15f;
-        smoothPitch += (pitch - smoothPitch) * 0.15f;
+        // 2. Pitch / Elevation factor:
+        // When pitch >= 0 (looking at horizon or ground), opacity is 0.
+        // As player tilts head up into the sky (-pitch), opacity quickly reaches 1.0.
+        float lookUpAngle = -pitch;
+        float pitchAlpha;
+        if (lookUpAngle <= 4.0f || isObstructed) {
+            pitchAlpha = 0.0f;
+        } else if (lookUpAngle >= 18.0f) {
+            pitchAlpha = 1.0f;
+        } else {
+            pitchAlpha = (lookUpAngle - 4.0f) / 14.0f;
+            pitchAlpha = pitchAlpha * pitchAlpha; // smooth quadratic ease
+        }
 
-        PoseStack poseStack = context.matrices();
-        if (poseStack == null) return;
+        currentSkyAlpha += (pitchAlpha - currentSkyAlpha) * 0.18f;
+        if (currentSkyAlpha < 0.01f) return;
 
-        MultiBufferSource consumers = context.consumers();
-        if (consumers == null) return;
+        // 3. Smooth Cosmic Inertia (lag behind camera rotation for celestial weight)
+        float diffYaw = yaw - smoothYaw;
+        while (diffYaw < -180.0f) diffYaw += 360.0f;
+        while (diffYaw > 180.0f) diffYaw -= 360.0f;
+        smoothYaw += diffYaw * 0.14f;
 
-        Font font = mc.font;
-        if (font == null) return;
+        smoothPitch += (pitch - smoothPitch) * 0.14f;
 
+        // 4. Perspective Screen Projection
+        int screenWidth = guiGraphics.guiWidth();
+        int screenHeight = guiGraphics.guiHeight();
+
+        double fovY = mc.options.fov().get();
+        double aspect = (double) screenWidth / (double) screenHeight;
+        double fovX = 2.0 * Math.toDegrees(Math.atan(Math.tan(Math.toRadians(fovY / 2.0)) * aspect));
+
+        // When looking high into the sky (pitch < -24), celestial anchor stays centered in view.
+        // When looking down towards horizon (pitch > -24), celestial anchor stays at -24 elevation in the sky,
+        // causing the lyrics to slide smoothly towards the top of the screen and disappear.
+        float anchorPitch = Math.min(-24.0f, smoothPitch);
+        float deltaPitch = smoothPitch - anchorPitch;
+        float deltaYaw = yaw - smoothYaw;
+        while (deltaYaw < -180.0f) deltaYaw += 360.0f;
+        while (deltaYaw > 180.0f) deltaYaw -= 360.0f;
+
+        double tanHalfFovX = Math.tan(Math.toRadians(fovX / 2.0));
+        double tanHalfFovY = Math.tan(Math.toRadians(fovY / 2.0));
+        double tanDeltaX = Math.tan(Math.toRadians(deltaYaw));
+        double tanDeltaY = Math.tan(Math.toRadians(deltaPitch));
+
+        float projX = (float) (screenWidth / 2.0 - (tanDeltaX / tanHalfFovX) * (screenWidth / 2.0));
+        float projY = (float) (screenHeight / 2.0 + (tanDeltaY / tanHalfFovY) * (screenHeight / 2.0));
+
+        // Gentle cosmic breathing bob
         long now = System.currentTimeMillis();
-        float hoverBob = (float) Math.sin((now % 4500) / 4500.0 * Math.PI * 2) * 0.7f;
+        float hoverBob = (float) Math.sin((now % 4500) / 4500.0 * Math.PI * 2) * 3.5f;
+        projY += hoverBob;
 
-        // Position high in the celestial sphere (46 blocks away in the sky)
-        float distance = 46.0f;
-        float elevationAngle = Math.max(22.0f, -smoothPitch);
-        float radYaw = (float) Math.toRadians(smoothYaw);
-        float radElev = (float) Math.toRadians(elevationAngle);
-
-        float dx = -(float) (Math.sin(radYaw) * Math.cos(radElev)) * distance;
-        float dy = (float) Math.sin(radElev) * distance + hoverBob;
-        float dz = (float) (Math.cos(radYaw) * Math.cos(radElev)) * distance;
-
-        poseStack.pushPose();
-        poseStack.translate(dx, dy, dz);
-        poseStack.mulPose(camera.rotation());
-
-        // Majestic celestial scale: ~22 meters wide in 3D world space
-        float scale = 0.11f;
-        poseStack.scale(-scale, -scale, scale);
-
+        // 5. Lyrics & Content Retrieval
+        Font font = mc.font;
         long progressMs = stateManager.getInterpolatedProgressMs();
         LyricLine currentLyric = LyricsManager.getInstance().getActiveLyricLine(progressMs);
         LyricLine nextLyric = LyricsManager.getInstance().getNextLyricLine(progressMs);
@@ -112,71 +129,87 @@ public class SkyLyricsRenderer {
         }
 
         long elapsed = now - lastLyricChangeTime;
-        float lineProgress = Math.min(1.0f, elapsed / 260.0f);
+        float lineProgress = Math.min(1.0f, elapsed / 220.0f);
         float lineEase = 1.0f - (float) Math.pow(1.0f - lineProgress, 3);
         float lineYGlide = (1.0f - lineEase) * 4.0f;
-        float activeAlpha = totalAlpha * lineEase;
+        float activeAlpha = currentSkyAlpha * lineEase;
 
-        if (lyricText.isEmpty()) {
-            // Instrumental or No Synced Lyrics: Floating Celestial Now Playing Card
-            String title = "✦ NOW PLAYING ✦";
-            String song = "♪ " + state.getTrackName() + " ♪";
-            String artist = "by " + state.getArtistNames();
+        boolean hasLyrics = !lyricText.isEmpty();
+        boolean hasNext = (nextLyric != null && !nextLyric.getText().isEmpty());
 
-            int wTitle = font.width(title);
-            int wSong = font.width(song);
-            int wArtist = font.width(artist);
+        // Calculate card dimensions
+        String mainText = hasLyrics ? "★  " + lyricText + "  ★" : "♪ " + state.getTrackName() + " ♪";
+        int mainW = font.width(mainText);
+        String headerText = hasLyrics ? "✦ " + state.getTrackName() + " • " + state.getArtistNames() + " ✦" : "✦ NOW PLAYING IN THE SKY ✦";
+        int headerW = font.width(headerText);
+        String nextText = (hasLyrics && hasNext) ? nextLyric.getText() : "";
+        int nextW = font.width(nextText);
 
-            font.drawInBatch(title, -wTitle / 2.0f, -12.0f, applyAlpha(0xFFFFF066, totalAlpha * 0.8f), true,
-                    poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-            font.drawInBatch(song, -wSong / 2.0f, 0.0f, applyAlpha(0xFFFFD700, totalAlpha), true,
-                    poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, applyAlpha(0x400A0A14, totalAlpha * 0.7f), 0xF000F0);
-            font.drawInBatch(artist, -wArtist / 2.0f, 13.0f, applyAlpha(0xFFAAAAAA, totalAlpha * 0.7f), true,
-                    poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-        } else {
-            // Full Synced Celestial Lyrics Presentation
-            // 1. Constellation Song Info Badge
-            String badge = "✦ " + state.getTrackName() + " • " + state.getArtistNames() + " ✦";
-            int badgeW = font.width(badge);
-            font.drawInBatch(badge, -badgeW / 2.0f, -13.0f, applyAlpha(0xFFFFF066, totalAlpha * 0.75f), true,
-                    poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
+        int cardW = Math.max(220, Math.max(mainW, Math.max(headerW, nextW)) + 36);
+        int cardH = (hasLyrics && hasNext) ? 54 : 40;
 
-            // 2. Active Lyric Line (Centerpiece in Radiant Royal Gold with Ambient Bloom Aura)
-            String mainText = "★  " + lyricText + "  ★";
-            int mainW = font.width(mainText);
-            float mainX = -mainW / 2.0f;
-            float mainY = lineYGlide;
+        int cardX = (int) (projX - cardW / 2.0f);
+        int cardY = (int) (projY - cardH / 2.0f);
 
-            // Soft 4-tap celestial starlight bloom aura
-            int auraColor = applyAlpha(0x50FFD700, activeAlpha * 0.55f);
-            font.drawInBatch(mainText, mainX - 1, mainY, auraColor, false, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-            font.drawInBatch(mainText, mainX + 1, mainY, auraColor, false, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-            font.drawInBatch(mainText, mainX, mainY - 1, auraColor, false, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-            font.drawInBatch(mainText, mainX, mainY + 1, auraColor, false, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, 0, 0xF000F0);
-
-            // Radiant main text with translucent cosmic backplate
-            int mainColor = applyAlpha(0xFFFFD700, activeAlpha);
-            int bgColor = applyAlpha(0x450A0A14, activeAlpha * 0.8f);
-            font.drawInBatch(mainText, mainX, mainY, mainColor, true, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, bgColor, 0xF000F0);
-
-            // 3. Upcoming Lyric Line Preview (Ethereal Starlight Silver-Gold)
-            if (nextLyric != null && !nextLyric.getText().isEmpty()) {
-                String nextText = nextLyric.getText();
-                int nextW = font.width(nextText);
-                float nextX = -nextW / 2.0f;
-                float nextY = mainY + 14.0f;
-
-                int nextColor = applyAlpha(0x88FFFDE7, totalAlpha * 0.65f);
-                int nextBg = applyAlpha(0x280A0A14, totalAlpha * 0.5f);
-                font.drawInBatch(nextText, nextX, nextY, nextColor, true, poseStack.last().pose(), consumers, Font.DisplayMode.NORMAL, nextBg, 0xF000F0);
-            }
+        // Offscreen check
+        if (cardX + cardW < -50 || cardX > screenWidth + 50 || cardY + cardH < -50 || cardY > screenHeight + 50) {
+            return;
         }
 
-        poseStack.popPose();
+        guiGraphics.pose().pushMatrix();
 
-        if (consumers instanceof MultiBufferSource.BufferSource bs) {
-            bs.endBatch();
+        // 6. Draw Frosted Obsidian Celestial Sky Capsule
+        renderCelestialGlassCard(guiGraphics, cardX, cardY, cardW, cardH, currentSkyAlpha);
+
+        // 7. Header (Constellation song badge)
+        int hY = cardY + 6;
+        guiGraphics.drawCenteredString(font, headerText, (int) projX, hY, applyAlpha(0xFFFFF066, currentSkyAlpha * 0.85f));
+
+        // 8. Main Lyric (Radiant Royal Gold with Ambient Bloom Aura)
+        int mY = cardY + 19 + (int) lineYGlide;
+
+        // 4-tap subtle golden bloom glow around active line
+        int glowColor = applyAlpha(0x44FFD700, activeAlpha * 0.6f);
+        guiGraphics.drawCenteredString(font, mainText, (int) projX - 1, mY, glowColor);
+        guiGraphics.drawCenteredString(font, mainText, (int) projX + 1, mY, glowColor);
+        guiGraphics.drawCenteredString(font, mainText, (int) projX, mY - 1, glowColor);
+        guiGraphics.drawCenteredString(font, mainText, (int) projX, mY + 1, glowColor);
+
+        // Main radiant text
+        guiGraphics.drawCenteredString(font, mainText, (int) projX, mY, applyAlpha(0xFFFFD700, activeAlpha));
+
+        // 9. Upcoming lyric preview (if present)
+        if (hasLyrics && hasNext) {
+            // Subtle glowing starlight separator line
+            int divY = cardY + 33;
+            guiGraphics.fill(cardX + 16, divY, cardX + cardW - 16, divY + 1, applyAlpha(0x22FFD700, currentSkyAlpha * 0.7f));
+
+            int nY = divY + 4;
+            guiGraphics.drawCenteredString(font, nextText, (int) projX, nY, applyAlpha(0x99FFFDE7, currentSkyAlpha * 0.75f));
         }
+
+        guiGraphics.pose().popMatrix();
+    }
+
+    private static void renderCelestialGlassCard(GuiGraphics guiGraphics, int x, int y, int w, int h, float alpha) {
+        // Multi-tier soft cosmic shadow
+        guiGraphics.fill(x + 1, y + 2, x + w - 1, y + h + 3, applyAlpha(0x35000000, alpha));
+
+        // Frosted deep obsidian glass body
+        guiGraphics.fill(x + 3, y, x + w - 3, y + h, applyAlpha(0x880B0B14, alpha));
+        guiGraphics.fill(x, y + 3, x + 3, y + h - 3, applyAlpha(0x880B0B14, alpha));
+        guiGraphics.fill(x + w - 3, y + 3, x + w, y + h - 3, applyAlpha(0x880B0B14, alpha));
+
+        // Top radiant gold specular gradient line
+        int cx = x + (w / 2);
+        guiGraphics.fillGradient(x + 8, y, cx, y + 2, applyAlpha(0x00FFD700, alpha), applyAlpha(0xFFFFD700, alpha));
+        guiGraphics.fillGradient(cx, y, x + w - 8, y + 2, applyAlpha(0xFFFFD700, alpha), applyAlpha(0x00FFD700, alpha));
+
+        // Subtle glowing golden border
+        int border = applyAlpha(0x30FFD700, alpha);
+        guiGraphics.fill(x + 3, y + h - 1, x + w - 3, y + h, border);
+        guiGraphics.fill(x, y + 3, x + 1, y + h - 3, border);
+        guiGraphics.fill(x + w - 1, y + 3, x + w, y + h - 3, border);
     }
 
     private static int applyAlpha(int argb, float alpha) {
