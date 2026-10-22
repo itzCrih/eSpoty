@@ -48,6 +48,7 @@ public class ModConfig {
     private boolean hudAutoHide = false;
     private int hudAutoHideSeconds = 8;
     private float hudScale = 1.0f;
+    private float hudOpacity = 0.85f;
     private String customClientId = "";
     private int volume = 80;
     private int volumeStep = 5;
@@ -187,6 +188,23 @@ public class ModConfig {
     public void setHudScale(float hudScale) {
         this.hudScale = hudScale;
         save();
+    }
+
+    public float getHudOpacity() {
+        return Math.max(0.0f, Math.min(1.0f, hudOpacity));
+    }
+
+    public void setHudOpacity(float hudOpacity) {
+        this.hudOpacity = Math.max(0.0f, Math.min(1.0f, hudOpacity));
+        save();
+    }
+
+    public int getHudOpacityPercent() {
+        return Math.round(getHudOpacity() * 100.0f);
+    }
+
+    public void setHudOpacityPercent(int percent) {
+        setHudOpacity(Math.max(0, Math.min(100, percent)) / 100.0f);
     }
 
     public String getCustomClientId() {

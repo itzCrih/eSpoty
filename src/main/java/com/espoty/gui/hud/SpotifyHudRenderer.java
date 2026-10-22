@@ -67,13 +67,13 @@ public class SpotifyHudRenderer {
         int screenWidth = client.getWindow().getGuiScaledWidth();
         int screenHeight = client.getWindow().getGuiScaledHeight();
 
-        int cardWidth = 224;
+        int cardWidth = 228;
         boolean showLyrics = config.isHudShowLyrics() && !config.isHudCompact();
         LyricLine currentLyric = showLyrics ? LyricsManager.getInstance().getActiveLyricLine(stateManager.getInterpolatedProgressMs()) : null;
         boolean hasActiveLyric = currentLyric != null && !currentLyric.getText().isEmpty();
 
-        int cardHeight = config.isHudCompact() ? 44 : 56;
-        int totalHeight = cardHeight + (hasActiveLyric ? 18 : 0);
+        int cardHeight = config.isHudCompact() ? 44 : 54;
+        int totalHeight = cardHeight + (hasActiveLyric ? 16 : 0);
 
         int x;
         int y;
@@ -110,19 +110,16 @@ public class SpotifyHudRenderer {
             y = (int) (y / scale);
         }
 
-        // 1. Ambient Drop Shadow
-        guiGraphics.fill(x + 2, y + 2, x + cardWidth + 2, y + cardHeight + 2, applyAlpha(0x55000000, animAlpha));
+        // 1. Unified Modern Glass Card with dynamic user opacity
+        renderModernCard(guiGraphics, x, y, cardWidth, totalHeight, animAlpha, config.getHudOpacity());
 
-        // 2. Card Background & Luxury Neon Borders
-        renderModernCard(guiGraphics, x, y, cardWidth, cardHeight, animAlpha);
-
-        // 3. Album Cover (38x38)
+        // 2. Album Cover (Chamfered frame)
         int artSize = config.isHudCompact() ? 32 : 38;
         int artX = x + 8;
         int artY = y + 8;
         renderModernAlbumArt(guiGraphics, state.getAlbumArtUrl(), artX, artY, artSize, animAlpha);
 
-        // 4. Track Details
+        // 3. Track Details
         int textX = artX + artSize + 8;
         int maxTextWidth = cardWidth - (textX - x) - 10;
 
@@ -161,7 +158,7 @@ public class SpotifyHudRenderer {
         }
         guiGraphics.drawString(font, artist, textX, artistY, applyAlpha(0xFFFFF066, animAlpha), true);
 
-        // 5. Progress Bar
+        // 4. Progress Bar
         long progressMs = stateManager.getInterpolatedProgressMs();
         long durationMs = state.getDurationMs();
         float progressRatio = durationMs > 0 ? Math.min(1.0f, (float) progressMs / durationMs) : 0f;
@@ -169,10 +166,10 @@ public class SpotifyHudRenderer {
         int barX = textX;
         int barY = artistY + 13;
         int barWidth = maxTextWidth;
-        int barHeight = 4;
+        int barHeight = 3;
 
         // Progress background track
-        guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, applyAlpha(0xFF252533, animAlpha));
+        guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, applyAlpha(0x44FFFFFF, animAlpha * config.getHudOpacity()));
 
         // Filled gold track with glowing cap
         int filledWidth = (int) (barWidth * progressRatio);
@@ -189,38 +186,33 @@ public class SpotifyHudRenderer {
             guiGraphics.pose().pushMatrix();
             guiGraphics.pose().scale(0.72f, 0.72f);
             int timeX = (int) ((barX + barWidth) / 0.72f) - font.width(timeText);
-            int timeY = (int) ((barY + 6) / 0.72f);
+            int timeY = (int) ((barY + 5) / 0.72f);
             guiGraphics.drawString(font, timeText, timeX, timeY, applyAlpha(0xFFAAAAAA, animAlpha), true);
             guiGraphics.pose().popMatrix();
         }
 
-        // 6. Floating Synced Lyric Pill
+        // 5. Seamless Integrated Lyrics Row
         if (hasActiveLyric) {
-            int lyricY = y + cardHeight + 4;
-            int lyricH = 14;
+            int dividerY = y + cardHeight - 2;
+            guiGraphics.fill(x + 8, dividerY, x + cardWidth - 8, dividerY + 1, applyAlpha(0x22FFFFFF, animAlpha * config.getHudOpacity()));
 
-            // Lyric pill shadow & background
-            guiGraphics.fill(x + 2, lyricY + 1, x + cardWidth + 2, lyricY + lyricH + 1, applyAlpha(0x44000000, animAlpha));
-            guiGraphics.fill(x, lyricY, x + cardWidth, lyricY + lyricH, applyAlpha(0xF0101018, animAlpha));
-            guiGraphics.fill(x, lyricY, x + cardWidth, lyricY + 1, applyAlpha(0xAAFFD700, animAlpha));
-            guiGraphics.fill(x, lyricY + lyricH - 1, x + cardWidth, lyricY + lyricH, applyAlpha(0x66FFD700, animAlpha));
-
+            int lyricY = dividerY + 4;
             // Glowing note icon
-            guiGraphics.drawString(font, "♪", x + 6, lyricY + 3, applyAlpha(0xFFFFD700, animAlpha), true);
+            guiGraphics.drawString(font, "♪", x + 8, lyricY, applyAlpha(0xFFFFD700, animAlpha), true);
 
             // Active lyric text with marquee if long
             String lyricText = currentLyric.getText();
             int lyricWidth = font.width(lyricText);
-            int maxLyricW = cardWidth - 24;
+            int maxLyricW = cardWidth - 28;
 
-            guiGraphics.enableScissor(x + 16, lyricY, x + cardWidth - 6, lyricY + lyricH);
+            guiGraphics.enableScissor(x + 18, lyricY, x + cardWidth - 8, lyricY + 11);
             if (lyricWidth > maxLyricW) {
                 long cycle = (now / 35) % (lyricWidth + 30);
-                int scrollX = (int) (x + 16 - cycle);
-                guiGraphics.drawString(font, lyricText, scrollX, lyricY + 3, applyAlpha(0xFFFFFDE7, animAlpha), true);
-                guiGraphics.drawString(font, lyricText, scrollX + lyricWidth + 30, lyricY + 3, applyAlpha(0xFFFFFDE7, animAlpha), true);
+                int scrollX = (int) (x + 18 - cycle);
+                guiGraphics.drawString(font, lyricText, scrollX, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
+                guiGraphics.drawString(font, lyricText, scrollX + lyricWidth + 30, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
             } else {
-                guiGraphics.drawString(font, lyricText, x + 16, lyricY + 3, applyAlpha(0xFFFFFDE7, animAlpha), true);
+                guiGraphics.drawString(font, lyricText, x + 18, lyricY, applyAlpha(0xFFFFFDE7, animAlpha), true);
             }
             guiGraphics.disableScissor();
         }
@@ -228,36 +220,58 @@ public class SpotifyHudRenderer {
         guiGraphics.pose().popMatrix();
     }
 
-    private static void renderModernCard(GuiGraphics guiGraphics, int x, int y, int width, int height, float alpha) {
-        // Deep Obsidian glass base
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, applyAlpha(0xF20D0D14, alpha));
+    private static void renderModernCard(GuiGraphics guiGraphics, int x, int y, int width, int height, float alpha, float hudOpacity) {
+        float effectiveBgAlpha = alpha * hudOpacity;
+        float effectiveBorderAlpha = alpha * Math.min(1.0f, hudOpacity * 1.2f);
 
-        // Soft Outer Gold Glow Border
-        guiGraphics.fill(x, y, x + width, y + 1, applyAlpha(0x88FFD700, alpha));
-        guiGraphics.fill(x, y + height - 1, x + width, y + height, applyAlpha(0x88FFD700, alpha));
-        guiGraphics.fill(x, y, x + 1, y + height, applyAlpha(0x88FFD700, alpha));
-        guiGraphics.fill(x + width - 1, y, x + width, y + height, applyAlpha(0x88FFD700, alpha));
+        // 1. Soft Multi-Layer Drop Shadow
+        guiGraphics.fill(x + 1, y + 2, x + width - 1, y + height + 3, applyAlpha(0x38000000, alpha));
+        guiGraphics.fill(x + 2, y + 3, x + width - 2, y + height + 5, applyAlpha(0x22000000, alpha));
 
-        // Top Golden Specular Accent Line
-        guiGraphics.fillGradient(x + 2, y + 1, x + width - 2, y + 2, applyAlpha(0xFFFFD700, alpha), applyAlpha(0xFFFFF59D, alpha));
+        // 2. Beveled/Chamfered Deep Frosted Obsidian Glass Body
+        guiGraphics.fill(x + 2, y, x + width - 2, y + height, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
+        guiGraphics.fill(x, y + 2, x + 2, y + height - 2, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
+        guiGraphics.fill(x + width - 2, y + 2, x + width, y + height - 2, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
+
+        // 3. Delicate Golden Specular Highlight Top Edge
+        guiGraphics.fillGradient(x + 4, y, x + width - 4, y + 1,
+                applyAlpha(0xCCFFD700, effectiveBorderAlpha),
+                applyAlpha(0x66FFF59D, effectiveBorderAlpha));
+
+        // 4. Subtle Ambient Borders (never harsh or blocky!)
+        int softBorderColor = applyAlpha(0x35FFD700, effectiveBorderAlpha);
+        guiGraphics.fill(x + 2, y + height - 1, x + width - 2, y + height, softBorderColor);
+        guiGraphics.fill(x, y + 2, x + 1, y + height - 2, softBorderColor);
+        guiGraphics.fill(x + width - 1, y + 2, x + width, y + height - 2, softBorderColor);
+
+        // Corner connector pixels for smooth rounded feeling
+        int cornerColor = applyAlpha(0x22FFD700, effectiveBorderAlpha);
+        guiGraphics.fill(x + 1, y + 1, x + 2, y + 2, cornerColor);
+        guiGraphics.fill(x + width - 2, y + 1, x + width - 1, y + 2, cornerColor);
+        guiGraphics.fill(x + 1, y + height - 2, x + 2, y + height - 1, cornerColor);
+        guiGraphics.fill(x + width - 2, y + height - 2, x + width - 1, y + height - 1, cornerColor);
     }
 
     private static void renderModernAlbumArt(GuiGraphics guiGraphics, String url, int x, int y, int size, float alpha) {
         Identifier texture = AlbumArtManager.getInstance().getAlbumTexture(url);
 
-        // Art frame background with double neon ring
-        guiGraphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, applyAlpha(0xAAFFD700, alpha));
-        guiGraphics.fill(x, y, x + size, y + size, applyAlpha(0xFF14141E, alpha));
+        // Art frame with smooth chamfered border
+        guiGraphics.fill(x + 1, y, x + size - 1, y + size, applyAlpha(0xFF14141E, alpha));
+        guiGraphics.fill(x, y + 1, x + 1, y + size - 1, applyAlpha(0xFF14141E, alpha));
+        guiGraphics.fill(x + size - 1, y + 1, x + size, y + size - 1, applyAlpha(0xFF14141E, alpha));
+
+        // Delicate gold border ring
+        guiGraphics.fill(x + 1, y, x + size - 1, y + 1, applyAlpha(0x66FFD700, alpha));
+        guiGraphics.fill(x + 1, y + size - 1, x + size - 1, y + size, applyAlpha(0x44FFD700, alpha));
+        guiGraphics.fill(x, y + 1, x + 1, y + size - 1, applyAlpha(0x44FFD700, alpha));
+        guiGraphics.fill(x + size - 1, y + 1, x + size, y + size - 1, applyAlpha(0x44FFD700, alpha));
 
         if (texture != null) {
-            guiGraphics.blit(texture, x, y, x + size, y + size, 0.0f, 1.0f, 0.0f, 1.0f);
+            guiGraphics.blit(texture, x + 1, y + 1, x + size - 1, y + size - 1, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
             Font font = Minecraft.getInstance().font;
             guiGraphics.drawCenteredString(font, "♫", x + (size / 2), y + (size / 2) - 4, applyAlpha(0xFFFFD700, alpha));
         }
-
-        // Inner rim
-        guiGraphics.fill(x, y, x + size, y + 1, applyAlpha(0x44FFFFFF, alpha));
     }
 
     private static int applyAlpha(int argb, float alpha) {
