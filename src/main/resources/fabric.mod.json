@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "espoty",
+	"version": "${version}",
+	"name": "eSpoty",
+	"description": "Full Spotify integration in Minecraft: live playback, player controls, queue, lyrics, and modern Gold & Yellow HUD.",
+	"authors": [
+		"eSpoty Team"
+	],
+	"license": "MIT",
+	"icon": "assets/espoty/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.espoty.client.ESpotyModClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": ">=1.21",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
