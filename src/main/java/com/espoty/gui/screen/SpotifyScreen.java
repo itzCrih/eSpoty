@@ -84,6 +84,11 @@ public class SpotifyScreen extends Screen {
         this.modalX = (this.width - this.modalWidth) / 2;
         this.modalY = (this.height - this.modalHeight) / 2;
 
+        this.dragSkyLinesRatio = (config.getSkyLyricsLength() - 3) / 12.0f;
+        this.dragSkyScaleRatio = (config.getSkyLyricsScalePercent() - 50) / 150.0f;
+        this.dragHudOpacityRatio = config.getHudOpacity();
+        this.dragHudScaleRatio = (config.getHudScalePercent() - 50) / 100.0f;
+
         if (currentTab == Tab.QUEUE) {
             stateManager.refreshQueue(null);
         }

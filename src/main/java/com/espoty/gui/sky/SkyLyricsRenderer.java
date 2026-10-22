@@ -128,43 +128,53 @@ public class SkyLyricsRenderer {
 
             // User setting for visible lyrics length / number of lines
             int maxTotalLines = config.getSkyLyricsLength();
-            int maxAboveBelow = Math.max(1, (maxTotalLines - 1) / 2);
-            float maxDist = (maxAboveBelow + 0.6f) * lineSpacing;
+            int linesAbove = maxTotalLines / 2;
+            int linesBelow = (maxTotalLines - 1) / 2;
 
             int count = lines.size();
             for (int i = 0; i < count; i++) {
+                int diff = i - activeIdx;
+                if (diff < -linesAbove || diff > linesBelow) continue;
+
                 String rawText = lines.get(i).getText().trim().toUpperCase();
                 if (rawText.isEmpty()) continue;
 
                 float relY = (float) (i * lineSpacing - smoothScrollY);
-                float distFromCenter = Math.abs(relY);
 
-                int deltaIdx = Math.abs(i - activeIdx);
-                if (deltaIdx > maxAboveBelow) continue;
+                boolean isActive = (diff == 0);
+                int absDiff = Math.abs(diff);
 
-                float alpha = Math.max(0.0f, 1.0f - (distFromCenter / maxDist));
-                alpha = alpha * alpha; // Smooth quadratic falloff
-                if (alpha < 0.05f) continue;
-
-                boolean isActive = (i == activeIdx);
-
-                // Active line is larger, adjacent lines slightly smaller, distant lines smaller still
-                float lineScale = isActive ? 1.15f : (deltaIdx == 1 ? 0.88f : 0.78f);
+                // Progressive scale: active is prominent, adjacent slightly smaller, outer lines compact
+                float lineScale;
+                if (isActive) {
+                    lineScale = 1.15f;
+                } else if (absDiff == 1) {
+                    lineScale = 0.92f;
+                } else if (absDiff == 2) {
+                    lineScale = 0.85f;
+                } else {
+                    lineScale = 0.78f;
+                }
 
                 Component comp = Component.literal(rawText).withStyle(MODERN_STYLE);
                 float halfW = font.width(comp) / 2.0f;
 
-                // Clean color hierarchy — no glow, just brightness difference
+                // Opacity & color hierarchy: clearly visible and readable for all configured lines
                 int coreColor;
                 if (isActive) {
-                    // Bright white — the text pops simply by being the brightest
-                    coreColor = applyAlpha(0xFFFFFFFF, alpha);
-                } else if (deltaIdx == 1) {
-                    // Soft light blue-white, noticeably dimmer
-                    coreColor = applyAlpha(0xFFC8D8E8, alpha * 0.55f);
+                    coreColor = 0xFFFFFFFF; // Pure radiant white
+                } else if (absDiff == 1) {
+                    coreColor = 0xC0E2E8F0; // 75% clean modern white
+                } else if (absDiff == 2) {
+                    coreColor = 0x9ECBD5E1; // 62% soft silver
+                } else if (absDiff == 3) {
+                    coreColor = 0x8094A3B8; // 50% subtle slate
                 } else {
-                    // Faded, ghostly — just enough to read
-                    coreColor = applyAlpha(0xFFA0B0C0, alpha * 0.30f);
+                    // Smooth linear fade for further lines down to 28% at the very boundary
+                    int maxDelta = (diff < 0) ? linesAbove : linesBelow;
+                    float progress = (float) (absDiff - 3) / Math.max(1, maxDelta - 3);
+                    float alpha = 0.45f - (progress * 0.17f); // 0.45f down to 0.28f
+                    coreColor = applyAlpha(0xFF94A3B8, alpha);
                 }
 
                 poseStack.pushPose();
