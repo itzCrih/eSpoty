@@ -676,7 +676,7 @@ public class SpotifyScreen extends Screen {
         guiGraphics.drawCenteredString(this.font, "🔄 Reload eSpoty Bridge", contentX + 80, row9Y + 8, reloadHover ? 0xFFFFF59D : 0xFFFFD700);
 
         // 10. Author credits & website (itzCrih • itzcrih.it) (Row 10)
-        String credit = "§7eSpoty v1.0.10 by §6itzCrih §8• §ehttps://itzcrih.it";
+        String credit = "§7eSpoty v1.0.11 by §6itzCrih §8• §ehttps://itzcrih.it";
         guiGraphics.drawString(this.font, credit, contentX, row9Y + 27, 0xFFAAAAAA, false);
     }
 
