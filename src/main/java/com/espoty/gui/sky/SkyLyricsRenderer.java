@@ -117,7 +117,7 @@ public class SkyLyricsRenderer {
             int activeIdx = lyrics.getActiveIndex(progressMs);
             if (activeIdx < 0) activeIdx = 0;
 
-            float lineSpacing = 15.0f;
+            float lineSpacing = 19.0f;
             double targetScrollY = activeIdx * lineSpacing;
 
             if (Math.abs(targetScrollY - smoothScrollY) > 200.0) {
@@ -161,31 +161,33 @@ public class SkyLyricsRenderer {
 
                 // Opacity & color hierarchy: clearly visible and readable for all configured lines
                 int coreColor;
+                int shadowColor;
                 if (isActive) {
                     coreColor = 0xFFFFFFFF; // Pure radiant white
+                    shadowColor = 0xB0000000; // Crisp deep drop shadow
                 } else if (absDiff == 1) {
                     coreColor = 0xC0E2E8F0; // 75% clean modern white
+                    shadowColor = 0x85000000;
                 } else if (absDiff == 2) {
                     coreColor = 0x9ECBD5E1; // 62% soft silver
+                    shadowColor = 0x65000000;
                 } else if (absDiff == 3) {
                     coreColor = 0x8094A3B8; // 50% subtle slate
+                    shadowColor = 0x50000000;
                 } else {
                     // Smooth linear fade for further lines down to 28% at the very boundary
                     int maxDelta = (diff < 0) ? linesAbove : linesBelow;
                     float progress = (float) (absDiff - 3) / Math.max(1, maxDelta - 3);
                     float alpha = 0.45f - (progress * 0.17f); // 0.45f down to 0.28f
                     coreColor = applyAlpha(0xFF94A3B8, alpha);
+                    shadowColor = applyAlpha(0xFF000000, alpha * 0.65f);
                 }
 
                 poseStack.pushPose();
                 poseStack.translate(0.0f, relY, 0.0f);
                 poseStack.scale(lineScale, lineScale, lineScale);
 
-                // Single clean text draw with MC's native drop shadow for depth
-                // The shadow=true param adds a subtle 1px shadow automatically
-                font.drawInBatch(comp, -halfW, -4.0f, coreColor, true,
-                        poseStack.last().pose(), bufferSource,
-                        Font.DisplayMode.POLYGON_OFFSET, 0, 0xF000F0);
+                drawCleanModernText(font, comp, -halfW, -4.0f, coreColor, shadowColor, poseStack, bufferSource);
 
                 poseStack.popPose();
             }
@@ -196,9 +198,7 @@ public class SkyLyricsRenderer {
             float halfW = font.width(comp) / 2.0f;
             poseStack.pushPose();
             poseStack.scale(1.15f, 1.15f, 1.15f);
-            font.drawInBatch(comp, -halfW, -4.0f, 0xFFFFFFFF, true,
-                    poseStack.last().pose(), bufferSource,
-                    Font.DisplayMode.POLYGON_OFFSET, 0, 0xF000F0);
+            drawCleanModernText(font, comp, -halfW, -4.0f, 0xFFFFFFFF, 0xB0000000, poseStack, bufferSource);
             poseStack.popPose();
         }
 
@@ -206,6 +206,35 @@ public class SkyLyricsRenderer {
 
         // Flush text vertices to OpenGL
         bufferSource.endBatch();
+    }
+
+    private static void drawCleanModernText(
+            Font font,
+            Component comp,
+            float x,
+            float y,
+            int coreColor,
+            int shadowColor,
+            PoseStack poseStack,
+            MultiBufferSource bufferSource
+    ) {
+        // 1. Subtle, clean drop shadow pushed back along Z to completely eliminate Z-fighting flicker
+        if (shadowColor != 0) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, -0.03f);
+            font.drawInBatch(comp, x + 1.0f, y + 1.0f, shadowColor, false,
+                    poseStack.last().pose(), bufferSource,
+                    Font.DisplayMode.NORMAL, 0, 0xF000F0);
+            poseStack.popPose();
+        }
+
+        // 2. Crisp radiant core text on Z = +0.02f with POLYGON_OFFSET
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, 0.02f);
+        font.drawInBatch(comp, x, y, coreColor, false,
+                poseStack.last().pose(), bufferSource,
+                Font.DisplayMode.POLYGON_OFFSET, 0, 0xF000F0);
+        poseStack.popPose();
     }
 
     private static int applyAlpha(int argb, float alpha) {
