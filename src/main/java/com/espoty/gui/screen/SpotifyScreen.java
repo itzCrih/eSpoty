@@ -738,7 +738,7 @@ public class SpotifyScreen extends Screen {
         guiGraphics.drawCenteredString(this.font, updateLabel, btn2X + (btnWidth / 2), row11Y + 8, updateTextColor);
 
         // 12. Author credits & website (itzCrih • itzcrih.it) (Row 12)
-        String credit = "§7eSpoty v1.1.4 by §6itzCrih §8• §ehttps://itzcrih.it" + (hasUpdate ? " §a(New v" + updateChecker.getLatestVersion() + "!)" : "");
+        String credit = "§7eSpoty v" + com.espoty.update.UpdateChecker.getCurrentVersion() + " by §6itzCrih §8• §ehttps://itzcrih.it" + (hasUpdate ? " §a(New v" + updateChecker.getLatestVersion() + "!)" : "");
         boolean creditHover = isMouseOver(mouseX, mouseY, contentX, row11Y + 25, 300, 14);
         guiGraphics.drawString(this.font, credit, contentX, row11Y + 27, creditHover ? 0xFFFFFFFF : 0xFFAAAAAA, false);
     }

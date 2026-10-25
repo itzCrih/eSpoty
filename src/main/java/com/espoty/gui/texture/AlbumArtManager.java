@@ -59,7 +59,7 @@ public class AlbumArtManager {
     private void loadAsync(String url) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("User-Agent", "eSpoty Minecraft Mod/1.1.4")
+                .header("User-Agent", "eSpoty Minecraft Mod/" + com.espoty.update.UpdateChecker.getCurrentVersion())
                 .timeout(Duration.ofSeconds(8))
                 .GET()
                 .build();

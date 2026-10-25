@@ -17,7 +17,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 public class UpdateChecker {
-    private static final String CURRENT_VERSION = "1.1.4";
+    private static final String CURRENT_VERSION = "1.1.5";
     private static final String REPO_OWNER = "itzCrih";
     private static final String REPO_NAME = "eSpoty";
     private static final String API_URL = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/releases/latest";
