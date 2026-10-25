@@ -149,7 +149,15 @@ public class UpdateChecker {
         notifiedInChat = true;
 
         String msg = "§6[eSpoty] §eA new update is available: §a" + latestVersion + " §7(Current: v" + CURRENT_VERSION + ")! §b" + releaseUrl;
-        client.player.displayClientMessage(Component.literal(msg), false);
+        try {
+            java.lang.reflect.Method m = client.player.getClass().getMethod("displayClientMessage", Component.class, boolean.class);
+            m.invoke(client.player, Component.literal(msg), false);
+            return;
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Method m = client.player.getClass().getMethod("sendSystemMessage", Component.class);
+            m.invoke(client.player, Component.literal(msg));
+        } catch (Throwable ignored) {}
     }
 
     public static void openWebpage(String url) {

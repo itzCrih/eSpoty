@@ -1,0 +1,183 @@
+package com.espoty.client;
+
+import com.espoty.ESpotyMod;
+import com.espoty.config.ModConfig;
+import com.espoty.gui.hud.SpotifyHudRenderer;
+import com.espoty.gui.screen.SpotifyScreen;
+import com.espoty.spotify.SpotifyAuth;
+import com.espoty.spotify.SpotifyProcessDetector;
+import com.espoty.spotify.SpotifyStateManager;
+import com.espoty.spotify.models.PlaybackState;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
+
+public class ESpotyModClient implements ClientModInitializer {
+    public static final String CATEGORY_ESPOTY = "key.category.espoty";
+
+    private static KeyMapping keyOpenGui;
+    private static KeyMapping keyPlayPause;
+    private static KeyMapping keyNext;
+    private static KeyMapping keyPrev;
+    private static KeyMapping keyToggleHud;
+
+    public static KeyMapping getKeyOpenGui() {
+        return keyOpenGui;
+    }
+
+    @Override
+    public void onInitializeClient() {
+        // Initialize config & managers
+        ModConfig.getInstance();
+        SpotifyStateManager stateManager = SpotifyStateManager.getInstance();
+
+        // Register Keybindings
+        keyOpenGui = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.espoty.open",
+                GLFW.GLFW_KEY_K,
+                CATEGORY_ESPOTY
+        ));
+
+        keyPlayPause = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.espoty.play_pause",
+                GLFW.GLFW_KEY_UNKNOWN,
+                CATEGORY_ESPOTY
+        ));
+
+        keyNext = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.espoty.next",
+                GLFW.GLFW_KEY_UNKNOWN,
+                CATEGORY_ESPOTY
+        ));
+
+        keyPrev = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.espoty.prev",
+                GLFW.GLFW_KEY_UNKNOWN,
+                CATEGORY_ESPOTY
+        ));
+
+        keyToggleHud = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.espoty.toggle_hud",
+                GLFW.GLFW_KEY_UNKNOWN,
+                CATEGORY_ESPOTY
+        ));
+
+        // Register In-Game HUD & Celestial Sky Lyrics (Rendered in 3D world with depth occlusion)
+        HudRenderCallback.EVENT.register(SpotifyHudRenderer::render);
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(com.espoty.gui.sky.SkyLyricsRenderer::render);
+
+        // Register Main Menu Mini Player
+        com.espoty.gui.widget.MainMenuMiniPlayer.register();
+
+        // Asynchronous non-blocking GitHub release update check
+        com.espoty.update.UpdateChecker.getInstance().checkForUpdatesAsync();
+
+        // Register Client Tick (Key Handling & Audio Ducking)
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            // Automatic sound ducking & Minecraft music mute when Spotify plays
+            com.espoty.audio.AudioDuckingManager.getInstance().tick(client);
+
+            // Notify player once in chat if an update is available
+            com.espoty.update.UpdateChecker.getInstance().checkAndNotifyInChat(client);
+
+            // Open Spotify GUI via keybind (default: K) anywhere
+            while (keyOpenGui.consumeClick()) {
+                client.setScreen(new SpotifyScreen());
+            }
+
+            if (client.player == null) return;
+
+            while (keyPlayPause.consumeClick()) {
+                stateManager.togglePlayPause();
+            }
+
+            while (keyNext.consumeClick()) {
+                stateManager.next();
+            }
+
+            while (keyPrev.consumeClick()) {
+                stateManager.previous();
+            }
+
+            while (keyToggleHud.consumeClick()) {
+                ModConfig cfg = ModConfig.getInstance();
+                cfg.setEnabled(!cfg.isEnabled());
+                sendChatFeedback(client, "eSpoty HUD " + (cfg.isEnabled() ? "Enabled" : "Disabled"));
+            }
+        });
+
+        // Register Client Commands (/espoty)
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            dispatcher.register(ClientCommandManager.literal("espoty")
+                    .executes(context -> {
+                        Minecraft.getInstance().execute(() -> {
+                            Minecraft.getInstance().setScreen(new SpotifyScreen());
+                        });
+                        return 1;
+                    })
+                    .then(ClientCommandManager.literal("refresh").executes(context -> {
+                        stateManager.fullReload();
+                        sendChatFeedback(context.getSource().getClient(), "§aForced full refresh! Spotify bridge and session reloaded.");
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("play").executes(context -> {
+                        stateManager.play();
+                        sendChatFeedback(context.getSource().getClient(), "Spotify playback resumed.");
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("pause").executes(context -> {
+                        stateManager.pause();
+                        sendChatFeedback(context.getSource().getClient(), "Spotify playback paused.");
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("next").executes(context -> {
+                        stateManager.next();
+                        sendChatFeedback(context.getSource().getClient(), "Skipped to next track.");
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("prev").executes(context -> {
+                        stateManager.previous();
+                        sendChatFeedback(context.getSource().getClient(), "Returned to previous track.");
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("now").executes(context -> {
+                        PlaybackState s = stateManager.getCurrentState();
+                        if (s != null) {
+                            sendChatFeedback(context.getSource().getClient(), "Now playing: §e" + s.getTrackName() + " §7by §6" + s.getArtistNames());
+                        } else {
+                            sendChatFeedback(context.getSource().getClient(), "No active playback detected.");
+                        }
+                        return 1;
+                    }))
+                    .then(ClientCommandManager.literal("status").executes(context -> {
+                        boolean pc = SpotifyProcessDetector.isSpotifyRunning();
+                        PlaybackState s = stateManager.getCurrentState();
+                        String track = (s != null) ? s.getTrackName() : "None";
+                        sendChatFeedback(context.getSource().getClient(), "eSpoty Status: [PC App: " + (pc ? "§aRunning" : "§cClosed") + "§f] [Active Track: §e" + track + "§f]");
+                        return 1;
+                    }))
+            );
+        });
+
+        // Shutdown hook
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            com.espoty.audio.AudioDuckingManager.getInstance().restore(client);
+            stateManager.shutdown();
+        });
+    }
+
+    private static void sendChatFeedback(Minecraft client, String message) {
+        if (client.player != null && ModConfig.getInstance().isShowChatFeedback()) {
+            client.player.displayClientMessage(Component.literal("§6[eSpoty] §f" + message), false);
+        }
+    }
+}
