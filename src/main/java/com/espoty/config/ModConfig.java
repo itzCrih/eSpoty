@@ -212,11 +212,11 @@ public class ModConfig {
     }
 
     public int getSkyLyricsLength() {
-        return Math.max(3, Math.min(15, skyLyricsLength));
+        return Math.max(3, Math.min(25, skyLyricsLength));
     }
 
     public void setSkyLyricsLength(int length) {
-        this.skyLyricsLength = Math.max(3, Math.min(15, length));
+        this.skyLyricsLength = Math.max(3, Math.min(25, length));
         save();
     }
 

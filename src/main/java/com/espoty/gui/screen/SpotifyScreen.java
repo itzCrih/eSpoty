@@ -84,7 +84,7 @@ public class SpotifyScreen extends Screen {
         this.modalX = (this.width - this.modalWidth) / 2;
         this.modalY = (this.height - this.modalHeight) / 2;
 
-        this.dragSkyLinesRatio = (config.getSkyLyricsLength() - 3) / 12.0f;
+        this.dragSkyLinesRatio = (config.getSkyLyricsLength() - 3) / 22.0f;
         this.dragSkyScaleRatio = (config.getSkyLyricsScalePercent() - 50) / 150.0f;
         this.dragHudOpacityRatio = config.getHudOpacity();
         this.dragHudScaleRatio = (config.getHudScalePercent() - 50) / 100.0f;
@@ -673,14 +673,14 @@ public class SpotifyScreen extends Screen {
         guiGraphics.fill(skyScaleKnobX - 1, row6Y + 5, skyScaleKnobX + 2, row6Y + 11, 0xFFFFFFFF);
         guiGraphics.drawString(this.font, skyScalePercent + "%", posBtnX + btnW + 6, row6Y + 4, 0xFFAAAAAA, true);
 
-        // 7. Sky Lyrics Lines Slider (Row 7: 3 to 15 lines)
+        // 7. Sky Lyrics Lines Slider (Row 7: 3 to 25 lines)
         int row7Y = contentY + 114;
         guiGraphics.drawString(this.font, "Sky Lyrics Lines:", contentX, row7Y + 4, 0xFFFFD700, true);
-        int skyLines = isDraggingSkyLines ? Math.round(3 + dragSkyLinesRatio * 12) : config.getSkyLyricsLength();
+        int skyLines = isDraggingSkyLines ? Math.round(3 + dragSkyLinesRatio * 22) : config.getSkyLyricsLength();
 
         // Sky Lines Track
         guiGraphics.fill(posBtnX, row7Y + 6, posBtnX + btnW, row7Y + 10, 0x35FFFFFF);
-        float skyLinesRatio = (skyLines - 3) / 12.0f;
+        float skyLinesRatio = (skyLines - 3) / 22.0f;
         int skyLinesFillW = (int) (btnW * Math.max(0f, Math.min(1f, skyLinesRatio)));
         if (skyLinesFillW > 0) {
             guiGraphics.fillGradient(posBtnX, row7Y + 6, posBtnX + skyLinesFillW, row7Y + 10, 0xFFFFD700, 0xFFFFF176);
@@ -985,7 +985,7 @@ public class SpotifyScreen extends Screen {
         int row5Y = contentY + 76;
         if (isMouseOver(mx, my, posBtnX, row5Y, btnW, btnH)) {
             config.setSkyLyricsEnabled(!config.isSkyLyricsEnabled());
-            setStatus(config.isSkyLyricsEnabled() ? "Sky Lyrics: Enabled ✦" : "Sky Lyrics: Disabled");
+            setStatus(config.isSkyLyricsEnabled() ? "Sky Lyrics: Enabled" : "Sky Lyrics: Disabled");
             return;
         }
 
@@ -1006,7 +1006,7 @@ public class SpotifyScreen extends Screen {
             this.isDraggingSkyLines = true;
             float ratio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
             this.dragSkyLinesRatio = ratio;
-            config.setSkyLyricsLength(Math.round(3 + ratio * 12));
+            config.setSkyLyricsLength(Math.round(3 + ratio * 22));
             setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
             return;
         }
@@ -1120,7 +1120,7 @@ public class SpotifyScreen extends Screen {
                 int posBtnX = contentX + 120;
                 int btnW = 160;
                 this.dragSkyLinesRatio = Math.max(0f, Math.min(1f, (float) (mx - posBtnX) / btnW));
-                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 12));
+                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 22));
                 setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
                 return true;
             }
@@ -1157,7 +1157,7 @@ public class SpotifyScreen extends Screen {
                 isDraggingSkyScale = false;
             }
             if (isDraggingSkyLines) {
-                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 12));
+                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 22));
                 isDraggingSkyLines = false;
             }
         }
