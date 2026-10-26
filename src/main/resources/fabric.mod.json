@@ -17,10 +17,10 @@
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"com.espoty.client.ESpotyModClient"
+			"it.itzcrih.espoty.client.ESpotyModClient"
 		],
 		"modmenu": [
-			"com.espoty.compat.modmenu.ESpotyModMenuCompat"
+			"it.itzcrih.espoty.compat.modmenu.ESpotyModMenuCompat"
 		]
 	},
 	"depends": {

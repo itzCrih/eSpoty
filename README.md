@@ -94,7 +94,7 @@ All keybindings can be customized in the Minecraft Options -> Controls -> Key Bi
 
 ## Getting Started
 
-1. Place the compiled `espoty-1.1.5.jar` into your Minecraft `.minecraft/mods` folder.
+1. Place the compiled `espoty-2.0.0.jar` into your Minecraft `.minecraft/mods` folder.
 2. Start your Spotify desktop application on your PC.
 3. Launch Minecraft with Fabric Loader.
 4. Press `K` (or type `/espoty`) to open the Hub. eSpoty connects automatically to your local Spotify app.
@@ -117,7 +117,7 @@ cd eSpoty
 ./gradlew build
 ```
 
-The compiled mod jar will be located in `build/libs/espoty-1.1.5.jar`.
+The compiled mod jar will be located in `build/libs/espoty-2.0.0.jar`.
 
 ---
 
