@@ -57,9 +57,9 @@ public class AudioDuckingManager {
             }
 
             // Mute Minecraft music and duck master sound
-            setVolume(client, SoundSource.MUSIC, 0.0f);
+            client.getSoundManager().updateCategoryVolume(SoundSource.MUSIC, 0.0f);
             float duckedMaster = (float) Math.max(0.05, baseMasterVolume * config.getDuckingMultiplier());
-            setVolume(client, SoundSource.MASTER, duckedMaster);
+            client.getSoundManager().updateCategoryVolume(SoundSource.MASTER, duckedMaster);
         } else if (isDucked) {
             restore(client);
         }
@@ -71,22 +71,11 @@ public class AudioDuckingManager {
             return;
         }
 
-        setVolume(client, SoundSource.MUSIC, (float) baseMusicVolume);
-        setVolume(client, SoundSource.MASTER, (float) baseMasterVolume);
+        try {
+            client.getSoundManager().updateCategoryVolume(SoundSource.MUSIC, (float) baseMusicVolume);
+            client.getSoundManager().updateCategoryVolume(SoundSource.MASTER, (float) baseMasterVolume);
+        } catch (Exception ignored) {}
         this.isDucked = false;
-    }
-
-    private void setVolume(Minecraft client, SoundSource source, float vol) {
-        if (client == null || client.getSoundManager() == null) return;
-        try {
-            java.lang.reflect.Method m = client.getSoundManager().getClass().getMethod("updateCategoryVolume", SoundSource.class, float.class);
-            m.invoke(client.getSoundManager(), source, vol);
-            return;
-        } catch (Throwable ignored) {}
-        try {
-            java.lang.reflect.Method m = client.getSoundManager().getClass().getMethod("updateSourceVolume", SoundSource.class, float.class);
-            m.invoke(client.getSoundManager(), source, vol);
-        } catch (Throwable ignored) {}
     }
 
     public boolean isDucked() {

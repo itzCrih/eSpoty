@@ -1,9 +1,14 @@
 package com.espoty.config;
 
 import com.espoty.ESpotyMod;
+import com.espoty.gui.theme.ThemeManager.ThemeAccent;
+import com.espoty.gui.theme.ThemeManager.ThemeLook;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.FontDescription;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.Identifier;
 
 import java.io.File;
 import java.io.FileReader;
@@ -40,6 +45,62 @@ public class ModConfig {
         }
     }
 
+    public enum SkyLyricsMode {
+        FOLLOW_LOOK("Dynamic Gaze"),
+        NORTH_SOUTH("Fixed North & South");
+
+        private final String displayName;
+
+        SkyLyricsMode(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public SkyLyricsMode next() {
+            SkyLyricsMode[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum LyricFont {
+        MODERN("Modern Sans", Identifier.fromNamespaceAndPath("espoty", "modern")),
+        SPOTIFY_BOLD("Spotify Bold", Identifier.fromNamespaceAndPath("espoty", "bold")),
+        MINECRAFT("Minecraft Pixel", Identifier.fromNamespaceAndPath("minecraft", "default")),
+        UNIFORM("Vanilla Smooth", Identifier.fromNamespaceAndPath("minecraft", "uniform")),
+        MONOSPACE("Monospace", Identifier.fromNamespaceAndPath("espoty", "mono"));
+
+        private final String displayName;
+        private final Identifier fontId;
+
+        LyricFont(String displayName, Identifier fontId) {
+            this.displayName = displayName;
+            this.fontId = fontId;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public Identifier getFontId() {
+            return fontId;
+        }
+
+        public Style getStyle() {
+            if ("minecraft".equals(fontId.getNamespace()) && "default".equals(fontId.getPath())) {
+                return Style.EMPTY;
+            }
+            return Style.EMPTY.withFont(new FontDescription.Resource(fontId));
+        }
+
+        public LyricFont next() {
+            LyricFont[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
     // Settings
     private boolean enabled = true;
     private HudPosition hudPosition = HudPosition.TOP_RIGHT;
@@ -48,8 +109,14 @@ public class ModConfig {
     private boolean hudAutoHide = false;
     private int hudAutoHideSeconds = 8;
     private boolean skyLyricsEnabled = true;
+    private SkyLyricsMode skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
     private float skyLyricsScale = 1.0f;
     private int skyLyricsLength = 5;
+    private LyricFont lyricFont = LyricFont.MODERN;
+    private ThemeLook themeLook = ThemeLook.AURORA;
+    private ThemeAccent themeAccent = ThemeAccent.MATCH_THEME;
+    private float glassOpacity = 0.90f;
+    private boolean syncHudTheme = true;
     private float hudScale = 1.0f;
     private float hudOpacity = 0.85f;
     private String customClientId = "";
@@ -87,6 +154,11 @@ public class ModConfig {
                 ModConfig config = GSON.fromJson(reader, ModConfig.class);
                 if (config != null) {
                     if (config.likedTracks == null) config.likedTracks = new HashSet<>();
+                    if (config.lyricFont == null) config.lyricFont = LyricFont.MODERN;
+                    if (config.skyLyricsMode == null) config.skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
+                    if (config.themeLook == null) config.themeLook = ThemeLook.AURORA;
+                    if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
+                    if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
                     return config;
                 }
             } catch (Exception e) {
@@ -194,6 +266,15 @@ public class ModConfig {
         save();
     }
 
+    public SkyLyricsMode getSkyLyricsMode() {
+        return skyLyricsMode != null ? skyLyricsMode : SkyLyricsMode.FOLLOW_LOOK;
+    }
+
+    public void setSkyLyricsMode(SkyLyricsMode skyLyricsMode) {
+        this.skyLyricsMode = skyLyricsMode != null ? skyLyricsMode : SkyLyricsMode.FOLLOW_LOOK;
+        save();
+    }
+
     public float getSkyLyricsScale() {
         return Math.max(0.5f, Math.min(2.0f, skyLyricsScale));
     }
@@ -217,6 +298,15 @@ public class ModConfig {
 
     public void setSkyLyricsLength(int length) {
         this.skyLyricsLength = Math.max(3, Math.min(25, length));
+        save();
+    }
+
+    public LyricFont getLyricFont() {
+        return lyricFont != null ? lyricFont : LyricFont.MODERN;
+    }
+
+    public void setLyricFont(LyricFont lyricFont) {
+        this.lyricFont = lyricFont != null ? lyricFont : LyricFont.MODERN;
         save();
     }
 
@@ -319,5 +409,49 @@ public class ModConfig {
 
     public Set<String> getLikedTracks() {
         return likedTracks;
+    }
+
+    public ThemeLook getThemeLook() {
+        return themeLook != null ? themeLook : ThemeLook.AURORA;
+    }
+
+    public void setThemeLook(ThemeLook themeLook) {
+        this.themeLook = themeLook != null ? themeLook : ThemeLook.AURORA;
+        save();
+    }
+
+    public ThemeAccent getThemeAccent() {
+        return themeAccent != null ? themeAccent : ThemeAccent.MATCH_THEME;
+    }
+
+    public void setThemeAccent(ThemeAccent themeAccent) {
+        this.themeAccent = themeAccent != null ? themeAccent : ThemeAccent.MATCH_THEME;
+        save();
+    }
+
+    public float getGlassOpacity() {
+        return Math.max(0.40f, Math.min(1.0f, glassOpacity));
+    }
+
+    public void setGlassOpacity(float glassOpacity) {
+        this.glassOpacity = Math.max(0.40f, Math.min(1.0f, glassOpacity));
+        save();
+    }
+
+    public int getGlassOpacityPercent() {
+        return Math.round(getGlassOpacity() * 100.0f);
+    }
+
+    public void setGlassOpacityPercent(int percent) {
+        setGlassOpacity(Math.max(40, Math.min(100, percent)) / 100.0f);
+    }
+
+    public boolean isSyncHudTheme() {
+        return syncHudTheme;
+    }
+
+    public void setSyncHudTheme(boolean syncHudTheme) {
+        this.syncHudTheme = syncHudTheme;
+        save();
     }
 }

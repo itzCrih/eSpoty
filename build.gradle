@@ -1,81 +1,53 @@
 plugins {
-	id 'fabric-loom' version "${loom_version}" apply false
-	id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+	id 'fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
-def is26 = project.hasProperty("minecraft_version") && project.minecraft_version.startsWith("26.")
-def isJava17 = project.hasProperty("minecraft_version") && (project.minecraft_version == "1.20" || (project.minecraft_version.startsWith("1.20.") && !project.minecraft_version.equals("1.20.5") && !project.minecraft_version.equals("1.20.6")) || project.minecraft_version.startsWith("1.19"))
-if (is26) {
-	apply plugin: 'net.fabricmc.fabric-loom'
-} else {
-	apply plugin: 'fabric-loom'
-}
-
-def family = project.findProperty("mc_family") ?: "modern"
-
-sourceSets {
-	main {
-		java {
-			srcDirs = ['src/main/java', "src-compat/${family}", 'src-stub']
-		}
-	}
-}
-
 repositories {
-	maven {
-		name = "Fabric"
-		url = "https://maven.fabricmc.net/"
-	}
 	mavenCentral()
+	maven {
+		name = "Modrinth"
+		url = "https://api.modrinth.com/maven"
+	}
+	maven {
+		name = "TerraformersMC"
+		url = "https://maven.terraformersmc.com/releases/"
+	}
 }
 
 base {
-	archivesName = project.findProperty("archives_name") ?: "espoty"
+	archivesName = "espoty"
 }
 
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	if (is26) {
-		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-		implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	} else {
-		mappings loom.officialMojangMappings()
-		modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-		modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	}
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	modCompileOnly "maven.modrinth:modmenu:17.0.1"
 }
 
 processResources {
 	def version = project.version
 	inputs.property "version", version
 
-	def mcDep = project.findProperty("mc_dep") ?: ">=1.21"
-	inputs.property "mc_dep", mcDep
-
-	def javaDep = project.findProperty("java_dep") ?: (is26 ? ">=25" : (isJava17 ? ">=17" : ">=21"))
-	inputs.property "java_dep", javaDep
-
 	filesMatching("fabric.mod.json") {
-		expand "version": version, "mc_dep": mcDep, "java_dep": javaDep
+		expand "version": version
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = is26 ? 25 : (isJava17 ? 17 : 21)
+	it.options.release = 21
 }
 
 java {
-	if (project.hasProperty("with_sources")) {
-		withSourcesJar()
-	}
-	def jv = is26 ? JavaVersion.VERSION_25 : (isJava17 ? JavaVersion.VERSION_17 : JavaVersion.VERSION_21)
-	sourceCompatibility = jv
-	targetCompatibility = jv
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
 }
 
 jar {
-	exclude 'com/terraformersmc/**'
 	from("LICENSE") {
 		rename { "${it}_${base.archivesName.get()}"}
 	}
