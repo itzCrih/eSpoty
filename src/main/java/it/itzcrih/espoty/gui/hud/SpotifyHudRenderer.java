@@ -367,8 +367,8 @@ public class SpotifyHudRenderer {
         int dockX = x;
         int dockY = isBottom ? (y - dockH - 4) : (y + cardH + 4);
 
-        // Controls dock
-        guiGraphics.fill(dockX + 2, dockY + 1, dockX + dockW - 2, dockY + dockH - 1, applyAlpha(0x28000000, alpha));
+        // Controls dock (rounded corners)
+        AaRoundRect.draw(guiGraphics, dockX, dockY, dockW, dockH, 7, applyAlpha(0x38000000, alpha), applyAlpha(accentColor, 0.30f * alpha));
 
         Font font = Minecraft.getInstance().font;
         int centerX = dockX + (dockW / 2);
@@ -405,11 +405,7 @@ public class SpotifyHudRenderer {
         int bg = hover ? applyAlpha(accent, alpha * 0.35f) : applyAlpha(0x22FFFFFF, alpha * 0.6f);
         int border = hover ? applyAlpha(accent, alpha * 0.9f) : applyAlpha(0x18FFFFFF, alpha * 0.4f);
 
-        g.fill(bx + 1, by, bx + bw - 1, by + bh, bg);
-        g.fill(bx, by + 1, bx + 1, by + bh - 1, border);
-        g.fill(bx + bw - 1, by + 1, bx + bw, by + bh - 1, border);
-        g.fill(bx + 1, by, bx + bw - 1, by + 1, border);
-        g.fill(bx + 1, by + bh - 1, bx + bw - 1, by + bh, border);
+        AaRoundRect.draw(g, bx, by, bw, bh, 5, bg, border);
 
         int textColor = hover ? applyAlpha(0xFFFFFFFF, alpha) : applyAlpha(0xD0FFFFFF, alpha);
         int textW = font.width(text);
@@ -483,42 +479,33 @@ public class SpotifyHudRenderer {
     }
 
     private static void renderModernCard(GuiGraphics guiGraphics, int x, int y, int width, int height, float bgAlpha) {
+        if (bgAlpha <= 0.01f) return;
         ModConfig config = ModConfig.getInstance();
         int accentColor = config.isSyncHudTheme() ? ThemeManager.getAccent() : 0xFFFFD700;
 
-        // 1. Horizontal gradient glow
-        int steps = 24;
-        int glowWidth = Math.min(width, 180);
-        float stepW = (float) glowWidth / (float) steps;
-        for (int i = 0; i < steps; i++) {
-            float t = (float) i / (float) steps;
-            float falloff = (1.0f - t) * (1.0f - t);
-            int glow = applyAlpha(accentColor, falloff * 0.20f * bgAlpha);
-            int gx1 = x + (int) (i * stepW);
-            int gx2 = x + (int) ((i + 1) * stepW);
-            guiGraphics.fill(gx1, y - 2, gx2, y + height + 2, glow);
-        }
+        // 1. Soft outer ambient rounded glow (radius 11)
+        int glowColor = applyAlpha(accentColor, 0.12f * bgAlpha);
+        AaRoundRect.draw(guiGraphics, x - 2, y - 2, width + 4, height + 4, 11, glowColor, 0);
 
-        // 2. Liquid Glass rounded background card
-        if (bgAlpha > 0.02f) {
-            int cardBg = applyAlpha(0xE00D0D14, bgAlpha);
-            int cardBorder = applyAlpha(accentColor, 0.40f * bgAlpha);
-            AaRoundRect.draw(guiGraphics, x, y, width, height, 8, cardBg, cardBorder);
-        }
+        // 2. Liquid Glass rounded background card (radius 9)
+        int cardBg = applyAlpha(0xE00D0D14, bgAlpha);
+        int cardBorder = applyAlpha(accentColor, 0.40f * bgAlpha);
+        AaRoundRect.draw(guiGraphics, x, y, width, height, 9, cardBg, cardBorder);
     }
 
     private static void renderModernAlbumArt(GuiGraphics guiGraphics, String url, int x, int y, int size, float alpha) {
         Identifier texture = AlbumArtManager.getInstance().getAlbumTexture(url);
 
         // Soft subtle drop shadow for depth against light in-game backgrounds
-        guiGraphics.fill(x + 1, y + 1, x + size + 1, y + size + 1, applyAlpha(0x40000000, alpha));
+        AaRoundRect.draw(guiGraphics, x + 1, y + 1, size, size, 4, applyAlpha(0x40000000, alpha), 0);
 
         if (texture != null) {
             guiGraphics.blit(texture, x, y, x + size, y + size, 0.0f, 1.0f, 0.0f, 1.0f);
+            AaRoundRect.draw(guiGraphics, x, y, size, size, 4, 0x00000000, applyAlpha(0x30FFFFFF, alpha));
         } else {
-            guiGraphics.fill(x, y, x + size, y + size, applyAlpha(0x22FFFFFF, alpha));
+            AaRoundRect.draw(guiGraphics, x, y, size, size, 4, applyAlpha(0x22FFFFFF, alpha), applyAlpha(0x30FFFFFF, alpha));
             Font font = Minecraft.getInstance().font;
-            guiGraphics.drawCenteredString(font, "*", x + (size / 2), y + (size / 2) - 4, applyAlpha(0xFFFFFFFF, alpha));
+            guiGraphics.drawCenteredString(font, "♪", x + (size / 2), y + (size / 2) - 4, applyAlpha(0xFFFFFFFF, alpha));
         }
     }
 
