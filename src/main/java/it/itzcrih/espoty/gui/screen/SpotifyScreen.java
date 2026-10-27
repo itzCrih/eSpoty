@@ -1,53 +1,85 @@
 package it.itzcrih.espoty.gui.screen;
 
 import it.itzcrih.espoty.config.ModConfig;
-import it.itzcrih.espoty.gui.texture.AlbumArtManager;
+import it.itzcrih.espoty.gui.render.AaRoundRect;
 import it.itzcrih.espoty.gui.theme.ThemeManager;
 import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeAccent;
 import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeLook;
 import it.itzcrih.espoty.gui.widget.AudioWaveformRenderer;
 import it.itzcrih.espoty.lyrics.LyricLine;
 import it.itzcrih.espoty.lyrics.LyricsManager;
+import it.itzcrih.espoty.spotify.ArtworkFinder;
 import it.itzcrih.espoty.spotify.SpotifyProcessDetector;
 import it.itzcrih.espoty.spotify.SpotifyStateManager;
 import it.itzcrih.espoty.spotify.models.PlaybackState;
+import it.itzcrih.espoty.spotify.models.QueueItem;
+import it.itzcrih.espoty.spotify.models.QueueResponse;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.sounds.SoundEvents;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Redesigned Spotify Hub Screen inspired by the Aurora Client liquid glass aesthetic.
- * Features 5 categories: Player, Lyrics, Queue, Themes (New!), and Settings.
+ * In-game control hub for eSpoty.
+ * Complete with:
+ * - Left Navigation Rail (110px) with custom HD logo, active glowing accent bar, and connection status pill.
+ * - Group Container Cards with 9px/10px SDF rounded corners and subtle hairline dividers.
+ * - Circular Thumb Sliders (4px pill track, 10px white circular knob, dedicated numeric tag badges).
+ * - Full-pill Toggle Switches (32x16px, 10px circular knob).
+ * - Smooth SDF Anti-Aliasing (AaRoundRect) across all borders and elements.
+ * - Guaranteed zero text cut-off: 25px safe margin between slider badges and scrollbars.
  */
 public class SpotifyScreen extends Screen {
 
     public enum Tab {
-        PLAYER("🎵 Player"),
-        LYRICS("📜 Lyrics"),
-        QUEUE("📑 Queue"),
-        THEMES("🎨 Themes"),
-        SETTINGS("⚙ Settings");
+        PLAYER("Player", ">", "Desktop media playback & controls"),
+        LYRICS("Lyrics", "=", "Synchronized real-time song lyrics"),
+        QUEUE("Queue", "#", "Next tracks & queue management"),
+        HUD_EDITOR("Hud Editor", "+", "Live in-game HUD positioning & scaling"),
+        THEMES("Themes", "*", "Liquid glass atmosphere & accents"),
+        SETTINGS("Settings", "@", "In-game HUD, 3D celestial sky & ducking");
 
         private final String title;
-        Tab(String title) { this.title = title; }
+        private final String icon;
+        private final String subtitle;
+
+        Tab(String title, String icon, String subtitle) {
+            this.title = title;
+            this.icon = icon;
+            this.subtitle = subtitle;
+        }
+
         public String getTitle() { return title; }
+        public String getIcon() { return icon; }
+        public String getSubtitle() { return subtitle; }
     }
 
-    private final SpotifyStateManager stateManager;
+    private Tab activeTab = Tab.PLAYER;
     private final ModConfig config;
-    private Tab currentTab = Tab.PLAYER;
+    private final SpotifyStateManager stateManager;
 
-    // Responsive Modal Frame (Aurora Proportions)
+    // Window Dimensions
     private int modalX;
     private int modalY;
-    private int modalWidth = 420;
-    private int modalHeight = 320;
+    private int modalWidth = 480;
+    private int modalHeight = 315;
+    private int sidebarWidth = 110;
+
+    // Slider constants
+    private static final int SLIDER_TRACK_W = 80;
+    private static final int BADGE_TAG_W = 38;
+
+    // Content total heights for exact scrolling boundaries
+    private static final int THEMES_CONTENT_HEIGHT = 414;
+    private static final int SETTINGS_CONTENT_HEIGHT = 612;
 
     // Interactive slider dragging states
     private boolean isDraggingSeek = false;
@@ -67,34 +99,40 @@ public class SpotifyScreen extends Screen {
     private boolean isDraggingDucking = false;
     private float dragDuckingRatio = 0.35f;
 
-    // Scroll states for each tab
+    // Scroll states
     private int lyricsScrollY = 0;
     private int queueScrollY = 0;
     private int themesScrollY = 0;
     private int settingsScrollY = 0;
 
     // Animations & timing
-    private boolean isClosing = false;
+    private long openStartTime;
     private long closeStartTime = 0;
-    private long tabChangeTime = System.currentTimeMillis();
+    private boolean isClosing = false;
+    private static final int OPEN_ANIM_MS = 200;
+    private static final int CLOSE_ANIM_MS = 150;
+    private long tabSwitchStartTime = 0;
+
+    // Ephemeral Toast Banner
     private String statusMessage = "";
     private long statusMessageTime = 0;
-    private long openTime = System.currentTimeMillis();
+
+    // Mod logo identifier
+    private static final Identifier LOGO_ICON = Identifier.fromNamespaceAndPath("espoty", "icon.png");
 
     public SpotifyScreen() {
-        super(Component.literal("eSpoty"));
-        this.stateManager = SpotifyStateManager.getInstance();
+        super(Component.literal("eSpoty Hub"));
         this.config = ModConfig.getInstance();
+        this.stateManager = SpotifyStateManager.getInstance();
     }
 
     @Override
     protected void init() {
         super.init();
-        this.openTime = System.currentTimeMillis();
+        this.openStartTime = System.currentTimeMillis();
+        this.closeStartTime = 0;
         this.isClosing = false;
-        this.tabChangeTime = System.currentTimeMillis();
-        this.modalWidth = Math.min(420, this.width - 16);
-        this.modalHeight = Math.min(320, this.height - 16);
+
         this.modalX = (this.width - this.modalWidth) / 2;
         this.modalY = (this.height - this.modalHeight) / 2;
 
@@ -104,9 +142,13 @@ public class SpotifyScreen extends Screen {
         this.dragHudScaleRatio = (config.getHudScalePercent() - 50) / 100.0f;
         this.dragGlassOpacityRatio = (config.getGlassOpacity() - 0.40f) / 0.60f;
         this.dragDuckingRatio = (config.getDuckingMultiplier() - 0.05f) / 0.95f;
+        this.stateManager.requestQueueRefresh();
 
-        if (currentTab == Tab.QUEUE) {
-            stateManager.refreshQueue(null);
+        PlaybackState state = stateManager.getCurrentState();
+        if (state != null && state.getVolumePercent() >= 0) {
+            this.dragVolumeRatio = state.getVolumePercent() / 100.0f;
+        } else {
+            this.dragVolumeRatio = config.getVolume() / 100.0f;
         }
     }
 
@@ -119,1488 +161,1878 @@ public class SpotifyScreen extends Screen {
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         long now = System.currentTimeMillis();
 
-        if (isClosing) {
-            long closeElapsed = now - closeStartTime;
-            if (closeElapsed >= 150) {
-                super.onClose();
-                return;
-            }
+        // 1. Subtle dark background backdrop blur & dim
+        guiGraphics.fill(0, 0, this.width, this.height, 0x88000000);
+
+        // Smooth entry/exit animation
+        float animProgress = isClosing
+                ? Math.max(0f, 1f - ((now - closeStartTime) / (float) CLOSE_ANIM_MS))
+                : Math.min(1f, (now - openStartTime) / (float) OPEN_ANIM_MS);
+
+        if (isClosing && animProgress <= 0.001f) {
+            this.minecraft.setScreen(null);
+            return;
         }
 
-        // Calculate smooth opening & closing ease
-        float animScale;
-        float backdropAlpha;
+        // Cubic ease-out
+        float scale = isClosing
+                ? 0.92f + 0.08f * animProgress
+                : 0.92f + 0.08f * (1f - (float) Math.pow(1f - animProgress, 3));
 
-        if (isClosing) {
-            long closeElapsed = now - closeStartTime;
-            float p = Math.min(1.0f, closeElapsed / 150.0f);
-            float ease = p * p;
-            animScale = 1.0f - (ease * 0.10f);
-            backdropAlpha = (1.0f - p) * 0.65f;
-        } else {
-            long elapsed = now - openTime;
-            float animProgress = Math.min(1.0f, elapsed / 200.0f);
-            float ease = 1.0f - (float) Math.pow(1.0f - animProgress, 3);
-            animScale = 0.90f + (0.10f * ease);
-            backdropAlpha = ease * 0.65f;
+        guiGraphics.pose().pushMatrix();
+        float centerX = this.width / 2.0f;
+        float centerY = this.height / 2.0f;
+        guiGraphics.pose().translate(centerX, centerY);
+        guiGraphics.pose().scale(scale, scale);
+        guiGraphics.pose().translate(-centerX, -centerY);
+
+        // 2. Render Main Window Frame
+        renderWindowFrame(guiGraphics, modalX, modalY, modalWidth, modalHeight);
+
+        // 3. Render Left Navigation Rail
+        renderSidebar(guiGraphics, modalX, modalY, sidebarWidth, modalHeight, mouseX, mouseY);
+
+        // 4. Render Content Header & Close Button
+        renderContentHeader(guiGraphics, mouseX, mouseY);
+
+        // 5. Render Active Content Tab with smooth lightweight transition
+        long tabElapsed = now - tabSwitchStartTime;
+        float tabAnimProgress = Math.min(1.0f, tabElapsed / 140.0f);
+        float tabEase = 1.0f - (float) Math.pow(1.0f - tabAnimProgress, 3);
+        float tabSlideY = (1.0f - tabEase) * 4.0f;
+
+        guiGraphics.pose().pushMatrix();
+        if (tabAnimProgress < 1.0f) {
+            guiGraphics.pose().translate(0, tabSlideY);
         }
 
-        // 1. Scrim / Ambient Backdrop Vignette
-        int alphaHex = Math.max(0, Math.min(255, (int) (backdropAlpha * 255)));
-        guiGraphics.fill(0, 0, this.width, this.height, (alphaHex << 24));
-
-        int cx = modalX + (modalWidth / 2);
-        int cy = modalY + (modalHeight / 2);
-
-        guiGraphics.pose().pushMatrix();
-        guiGraphics.pose().translate((float) cx, (float) cy);
-        guiGraphics.pose().scale(animScale, animScale);
-        guiGraphics.pose().translate((float) -cx, (float) -cy);
-
-        // 2. Liquid Glass Aurora Modal Frame
-        renderModernModalFrame(guiGraphics);
-
-        // 3. Header Bar with Tabs
-        renderHeader(guiGraphics, mouseX, mouseY, now);
-
-        // 4. Tab Content with Snappy Vertical Glide Transition
-        long tabElapsed = now - tabChangeTime;
-        float tabProgress = Math.min(1.0f, tabElapsed / 150.0f);
-        float tabEase = 1.0f - (float) Math.pow(1.0f - tabProgress, 3);
-        float tabGlideY = (1.0f - tabEase) * 5.0f;
-
-        guiGraphics.pose().pushMatrix();
-        guiGraphics.pose().translate(0f, tabGlideY);
-
-        switch (currentTab) {
-            case PLAYER -> renderPlayerTab(guiGraphics, mouseX, mouseY, now);
+        switch (activeTab) {
+            case PLAYER -> renderPlayerTab(guiGraphics, mouseX, mouseY);
             case LYRICS -> renderLyricsTab(guiGraphics, mouseX, mouseY);
             case QUEUE -> renderQueueTab(guiGraphics, mouseX, mouseY);
+            case HUD_EDITOR -> renderHudEditorTab(guiGraphics, mouseX, mouseY);
             case THEMES -> renderThemesTab(guiGraphics, mouseX, mouseY);
             case SETTINGS -> renderSettingsTab(guiGraphics, mouseX, mouseY);
         }
 
         guiGraphics.pose().popMatrix();
 
-        // 5. Status Toast Banner
-        if (!statusMessage.isEmpty() && now - statusMessageTime < 3200) {
+        // 6. Ephemeral Toast Status Banner
+        if (now - statusMessageTime < 2400 && !statusMessage.isEmpty()) {
             renderStatusBanner(guiGraphics);
         }
 
         guiGraphics.pose().popMatrix();
-
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
 
-    private void renderModernModalFrame(GuiGraphics guiGraphics) {
-        int x = modalX;
-        int y = modalY;
-        int w = modalWidth;
-        int h = modalHeight;
+    // =========================================================================
+    // SHELL & NAVIGATION RAIL
+    // =========================================================================
 
-        // 1. Aurora Multi-Stage Drop Shadows (Soft Blur Simulation)
-        guiGraphics.fill(x + 2, y + 4, x + w + 2, y + h + 6, 0x35000000);
-        guiGraphics.fill(x + 4, y + 7, x + w + 4, y + h + 9, 0x22000000);
-        guiGraphics.fill(x + 7, y + 10, x + w + 7, y + h + 13, 0x12000000);
+    private void renderWindowFrame(GuiGraphics guiGraphics, int x, int y, int w, int h) {
+        // Multi-stage soft drop shadow
+        AaRoundRect.draw(guiGraphics, x - 6, y - 4, w + 12, h + 14, 16, 0x14000000, 0);
+        AaRoundRect.draw(guiGraphics, x - 3, y - 2, w + 6, h + 8, 14, 0x22000000, 0);
 
-        // 2. Rounded Liquid Glass Body
-        int winBg = ThemeManager.getWindowBg();
-        guiGraphics.fill(x + 3, y, x + w - 3, y + h, winBg);
-        guiGraphics.fill(x, y + 3, x + 3, y + h - 3, winBg);
-        guiGraphics.fill(x + w - 3, y + 3, x + w, y + h - 3, winBg);
+        // Main Liquid Glass Window Body
+        AaRoundRect.draw(guiGraphics, x, y, w, h, 12, ThemeManager.getWindowBg(), ThemeManager.getGlassEdge());
 
-        // 3. Top Specular Sheen Line with Gradient
+        // Specular top highlight sheen
         int sheen1 = ThemeManager.getSheen();
         int sheen2 = ThemeManager.applyAlpha(ThemeManager.getAccent2(), 0.08f);
-        guiGraphics.fillGradient(x + 4, y, x + w - 4, y + 2, sheen1, sheen2);
-
-        // 4. Delicate Glowing Glass Border
-        int border = ThemeManager.getGlassEdge();
-        guiGraphics.fill(x + 3, y + h - 1, x + w - 3, y + h, border);
-        guiGraphics.fill(x, y + 3, x + 1, y + h - 3, border);
-        guiGraphics.fill(x + w - 1, y + 3, x + w, y + h - 3, border);
-
-        // Rounded Chamfer Corner Connectors
-        int cornerColor = ThemeManager.applyAlpha(border, 0.60f);
-        guiGraphics.fill(x + 1, y + 1, x + 3, y + 3, cornerColor);
-        guiGraphics.fill(x + w - 3, y + 1, x + w - 1, y + 3, cornerColor);
-        guiGraphics.fill(x + 1, y + h - 3, x + 3, y + h - 1, cornerColor);
-        guiGraphics.fill(x + w - 3, y + h - 3, x + w - 1, y + h - 1, cornerColor);
+        guiGraphics.fillGradient(x + 12, y + 1, x + w - 12, y + 2, sheen1, sheen2);
     }
 
-    private void renderHeader(GuiGraphics guiGraphics, int mouseX, int mouseY, long now) {
-        int x = modalX + 14;
-        int y = modalY + 9;
+    private void renderSidebar(GuiGraphics guiGraphics, int x, int y, int w, int h, int mouseX, int mouseY) {
+        // Subtle darker tinted sidebar backdrop
+        AaRoundRect.draw(guiGraphics, x + 2, y + 2, w - 2, h - 4, 10, 0x26000000, 0);
 
-        // Brand Pill: "✦ eSpoty" + Version Tag
-        int accent = ThemeManager.getAccent();
-        guiGraphics.drawString(this.font, "✦ eSpoty", x, y + 1, accent, true);
-        guiGraphics.drawString(this.font, "v" + it.itzcrih.espoty.update.UpdateChecker.getCurrentVersion(), x + 58, y + 2, ThemeManager.getTextMuted(), false);
+        // Header Logo & Title
+        int logoX = x + 10;
+        int logoY = y + 12;
+        int logoSize = 26;
+        int logoRadius = 6;
 
-        // Close Button (Top-Right Circular Glass Disc "✕")
-        int closeX = modalX + modalWidth - 18;
-        boolean closeHover = mouseX >= closeX - 4 && mouseX <= closeX + 12 && mouseY >= y && mouseY <= y + 14;
-        if (closeHover) {
-            guiGraphics.fill(closeX - 3, y - 1, closeX + 11, y + 13, 0x30FF4B4B);
+        AaRoundRect.draw(guiGraphics, logoX, logoY, logoSize, logoSize, logoRadius, 0x33000000, 0);
+
+        try {
+            guiGraphics.blit(LOGO_ICON, logoX, logoY, logoX + logoSize, logoY + logoSize, 0f, 1f, 0f, 1f);
+        } catch (Exception ignored) {
+            guiGraphics.drawString(this.font, "*", logoX + 2, logoY + 4, ThemeManager.getAccent(), true);
         }
-        guiGraphics.drawString(this.font, "✕", closeX, y + 1, closeHover ? 0xFFFF4B4B : 0xFF71717A, true);
 
-        // Segmented Tab Bar Container (Aurora Capsule Style)
-        int tabY = modalY + 25;
-        int tabBarW = modalWidth - 28;
-        guiGraphics.fill(modalX + 14, tabY, modalX + 14 + tabBarW, tabY + 20, 0x2A000000);
-        guiGraphics.fill(modalX + 14, tabY + 19, modalX + 14 + tabBarW, tabY + 20, 0x14FFFFFF);
+        AaRoundRect.draw(guiGraphics, logoX, logoY, logoSize, logoSize, logoRadius, 0, ThemeManager.applyAlpha(ThemeManager.getGlassEdge(), 0.85f));
 
-        int tabX = modalX + 16;
-        for (Tab tab : Tab.values()) {
-            boolean active = (tab == currentTab);
-            String title = tab.getTitle();
-            int tabW = this.font.width(title) + 12;
-            int tabH = 18;
-            boolean hover = mouseX >= tabX && mouseX <= tabX + tabW && mouseY >= tabY && mouseY <= tabY + tabH;
+guiGraphics.pose().pushMatrix();
+        guiGraphics.pose().translate(x + 40, y + 19);
+        guiGraphics.pose().scale(1.35f, 1.35f);
+        guiGraphics.drawString(this.font, "eSpoty", 0, 0, 0xFFFFFFFF, true);
+        guiGraphics.pose().popMatrix();
 
-            if (active) {
-                // Illuminated Theme Accent Capsule
-                int activeBg = ThemeManager.getAccentDim(1.0f);
-                guiGraphics.fill(tabX + 1, tabY + 1, tabX + tabW - 1, tabY + tabH - 1, activeBg);
-                guiGraphics.fill(tabX + 2, tabY + tabH - 2, tabX + tabW - 2, tabY + tabH, accent);
-                guiGraphics.drawCenteredString(this.font, title, tabX + (tabW / 2), tabY + 5, accent);
-            } else {
-                if (hover) {
-                    guiGraphics.fill(tabX + 1, tabY + 1, tabX + tabW - 1, tabY + tabH - 1, 0x18FFFFFF);
-                }
-                int textCol = hover ? ThemeManager.getTextPrimary() : ThemeManager.getTextSecondary();
-                guiGraphics.drawCenteredString(this.font, title, tabX + (tabW / 2), tabY + 5, textCol);
+        // Navigation Tabs Stack
+        Tab[] tabs = Tab.values();
+        int startY = y + 54;
+        int tabH = 30;
+        int tabGap = 3;
+        int tabX = x + 8;
+        int tabW = w - 16;
+
+        for (int i = 0; i < tabs.length; i++) {
+            Tab tab = tabs[i];
+            int itemY = startY + (i * (tabH + tabGap));
+            boolean isActive = (tab == activeTab);
+            boolean hover = isMouseOver(mouseX, mouseY, tabX, itemY, tabW, tabH);
+
+            int bg = isActive ? ThemeManager.getAccentDim(0.24f) : (hover ? 0x1AFFFFFF : 0);
+            int border = isActive ? ThemeManager.applyAlpha(ThemeManager.getAccent(), 0.65f) : (hover ? 0x24FFFFFF : 0);
+
+            AaRoundRect.draw(guiGraphics, tabX, itemY, tabW, tabH, 6, bg, border);
+
+            // Left Active Glow Bar
+            if (isActive) {
+                AaRoundRect.draw(guiGraphics, tabX + 2, itemY + 5, 3, tabH - 10, 1, ThemeManager.getAccent(), 0);
             }
 
-            tabX += tabW + 3;
+            // Tab Icon & Label
+            int textColor = isActive ? ThemeManager.getAccent() : (hover ? 0xFFFFFFFF : ThemeManager.getTextSecondary());
+            guiGraphics.drawString(this.font, tab.getIcon(), tabX + 9, itemY + 8, textColor, true);
+            guiGraphics.drawString(this.font, tab.getTitle(), tabX + 27, itemY + 8, textColor, isActive);
         }
+
+
+
+        // Vertical Glass Divider Seam between Sidebar and Content
+        guiGraphics.fill(x + w, y + 8, x + w + 1, y + h - 8, 0x18FFFFFF);
     }
 
-    private void renderPlayerTab(GuiGraphics guiGraphics, int mouseX, int mouseY, long now) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
+    private void renderContentHeader(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 26;
+
+        // Active Section Title with Star Glyph (Centered vertically with close button)
+        guiGraphics.drawString(this.font, activeTab.getTitle().toUpperCase(), contentX, modalY + 16, ThemeManager.getAccent(), true);
+
+        // Sleek Circular Glass Close Button (turns smooth red on hover)
+        int closeSize = 16;
+        int closeX = modalX + modalWidth - closeSize - 12;
+        int closeY = modalY + 12;
+        boolean closeHover = isMouseOver(mouseX, mouseY, closeX - 2, closeY - 2, closeSize + 4, closeSize + 4);
+
+        int closeBg = closeHover ? 0x44FF3333 : 0x14FFFFFF;
+        int closeBorder = closeHover ? 0xFFFF4444 : 0x28FFFFFF;
+        int closeText = closeHover ? 0xFFFF5555 : 0xFFCBD5E1;
+
+        AaRoundRect.draw(guiGraphics, closeX, closeY, closeSize, closeSize, closeSize / 2, closeBg, closeBorder);
+        guiGraphics.drawCenteredString(this.font, "x", closeX + (closeSize / 2), closeY + 4, closeText);
+
+        // Hairline separator below header
+        guiGraphics.fillGradient(contentX, modalY + 38, modalX + modalWidth - 12, modalY + 39, ThemeManager.getGlassEdge(), 0x05FFFFFF);
+    }
+
+    // =========================================================================
+    // TAB 1: PLAYER
+    // =========================================================================
+
+    private void renderPlayerTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
         int accent = ThemeManager.getAccent();
         int accent2 = ThemeManager.getAccent2();
 
         PlaybackState state = stateManager.getCurrentState();
 
-        if (state == null) {
-            int cx = modalX + (modalWidth / 2);
-            renderGlassCard(guiGraphics, cx - 110, modalY + 80, 220, 110, false, false);
-            guiGraphics.drawCenteredString(this.font, "No active Spotify track detected.", cx, modalY + 98, ThemeManager.getTextSecondary());
-            guiGraphics.drawCenteredString(this.font, "Start playing music in your Spotify Desktop app!", cx, modalY + 114, accent);
+        if (state == null || !state.isPlaying() && (state.getTrackName() == null || state.getTrackName().isEmpty())) {
+            int cx = contentX + (contentW / 2);
+            renderGlassCard(guiGraphics, contentX, contentY + 24, contentW, 110, false, false);
+            guiGraphics.drawCenteredString(this.font, "No active Spotify track detected.", cx, contentY + 54, ThemeManager.getTextSecondary());
+            guiGraphics.drawCenteredString(this.font, "Start Spotify and play any song to begin listening.", cx, contentY + 70, accent);
 
-            int btnX = cx - 75;
-            int btnY = modalY + 144;
-            boolean hover = isMouseOver(mouseX, mouseY, btnX, btnY, 150, 24);
-            guiGraphics.fill(btnX, btnY, btnX + 150, btnY + 24, hover ? accent2 : accent);
-            guiGraphics.drawCenteredString(this.font, "Launch Spotify App", cx, btnY + 8, 0xFF0B0F19);
+            int btnW = 120;
+            int btnH = 22;
+            int btnX = cx - (btnW / 2);
+            int btnY = contentY + 92;
+            boolean btnHover = isMouseOver(mouseX, mouseY, btnX, btnY, btnW, btnH);
+            renderPillButton(guiGraphics, "Launch Spotify Desktop", btnX, btnY, btnW, btnH, btnHover);
             return;
         }
 
-        // 1. High-Res Album Art with Rounded Glass Card
-        int artSize = 74;
-        Identifier texture = AlbumArtManager.getInstance().getAlbumTexture(state.getAlbumArtUrl());
+        // 1. Album Artwork Card
+        int artSize = 64;
+        int artX = contentX + 6;
+        int artY = contentY + 6;
+        AaRoundRect.draw(guiGraphics, artX, artY, artSize, artSize, 6, 0x33000000, ThemeManager.getGlassEdge());
 
-        renderGlassCard(guiGraphics, contentX, contentY, artSize, artSize, false, state.isPlaying());
-
+        Identifier texture = (state.getAlbumArtUrl() != null && !state.getAlbumArtUrl().isEmpty()) ? it.itzcrih.espoty.gui.texture.AlbumArtManager.getInstance().getAlbumTexture(state.getAlbumArtUrl()) : null;
         if (texture != null) {
-            guiGraphics.blit(texture, contentX + 2, contentY + 2, contentX + artSize - 2, contentY + artSize - 2, 0.0f, 1.0f, 0.0f, 1.0f);
+            guiGraphics.blit(texture, artX + 1, artY + 1, artX + artSize - 1, artY + artSize - 1, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
-            guiGraphics.drawCenteredString(this.font, "♫", contentX + (artSize / 2), contentY + (artSize / 2) - 6, accent);
+            guiGraphics.drawCenteredString(this.font, "*", artX + (artSize / 2), artY + (artSize / 2) - 4, accent);
         }
 
-        // 2. Track Metadata in Glass Panel
-        int infoX = contentX + artSize + 14;
-        int infoW = modalWidth - (infoX - modalX) - 34;
+        // 2. Track Title, Artist, Album Info
+        int infoX = artX + artSize + 12;
+        int infoMaxW = contentW - artSize - 42;
 
-        String title = state.getTrackName();
-        if (this.font.width(title) > infoW) {
-            title = trimWithEllipsis(title, infoW);
-        }
-        guiGraphics.drawString(this.font, title, infoX, contentY + 4, accent, true);
+        String trackTitle = trimWithEllipsis(state.getTrackName(), infoMaxW);
+        guiGraphics.drawString(this.font, trackTitle, infoX, contentY + 8, 0xFFFFFFFF, true);
 
-        // Heart "Liked Songs" Button (❤ / ♡)
-        int heartX = modalX + modalWidth - 28;
-        int heartY = contentY + 3;
-        boolean isLiked = stateManager.isCurrentTrackLiked();
-        boolean heartHover = isMouseOver(mouseX, mouseY, heartX - 3, heartY - 3, 16, 16);
-        String heartIcon = isLiked ? "❤" : "♡";
-        int heartColor = isLiked ? accent : (heartHover ? accent2 : ThemeManager.getTextMuted());
-        guiGraphics.drawString(this.font, heartIcon, heartX, heartY, heartColor, true);
-
-        String artist = state.getArtistNames();
-        if (this.font.width(artist) > infoW) {
-            artist = trimWithEllipsis(artist, infoW);
-        }
-        guiGraphics.drawString(this.font, artist, infoX, contentY + 18, ThemeManager.getTextPrimary(), false);
+        String artist = trimWithEllipsis(state.getArtistNames(), infoMaxW);
+        guiGraphics.drawString(this.font, artist, infoX, contentY + 23, ThemeManager.getTextPrimary(), false);
 
         String album = state.getAlbumName();
-        if (!album.isEmpty()) {
-            if (this.font.width(album) > infoW) {
-                album = trimWithEllipsis(album, infoW);
-            }
-            guiGraphics.drawString(this.font, album, infoX, contentY + 32, ThemeManager.getTextSecondary(), false);
+        if (album != null && !album.isEmpty()) {
+            album = trimWithEllipsis(album, infoMaxW);
+            guiGraphics.drawString(this.font, album, infoX, contentY + 38, ThemeManager.getTextSecondary(), false);
         }
 
-        // Device Pill Tag
-        guiGraphics.drawString(this.font, "💻 Spotify Desktop", infoX, contentY + 54, accent2, false);
+        // Like Heart Icon
+        boolean isLiked = stateManager.isCurrentTrackLiked();
+        int heartX = contentX + contentW - 18;
+        int heartY = contentY + 8;
+        boolean heartHover = isMouseOver(mouseX, mouseY, heartX - 4, heartY - 4, 18, 18);
+        int heartColor = isLiked ? accent : (heartHover ? accent2 : ThemeManager.getTextMuted());
+        guiGraphics.drawString(this.font, isLiked ? "[+]" : "[-]", heartX, heartY, heartColor, isLiked);
 
-        // Dynamic Audio Waveform Visualizer
-        AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, infoX + 115, contentY + 66, 125, 14, 20,
-                state.isPlaying(), stateManager.getInterpolatedProgressMs(), 1.0f, accent, accent2,
-                state.getTrackName(), state.getArtistNames(), true);
+        // Device indicator tag
+        if (state.getDeviceName() != null && !state.getDeviceName().isEmpty()) {
+            String devStr = "Device: " + state.getDeviceName();
+            guiGraphics.drawString(this.font, trimWithEllipsis(devStr, 130), infoX, contentY + 54, ThemeManager.getTextMuted(), false);
+        }
 
-        // 3. Modern Interactive Seek Bar
-        int seekY = contentY + 86;
-        int seekW = modalWidth - 32;
-        int seekH = 4;
+        // 3. Progress Seek Bar
+        int seekY = contentY + 82;
+        int seekW = contentW - 8;
+        int seekX = contentX + 4;
         long progressMs = isDraggingSeek ? (long) (state.getDurationMs() * dragSeekRatio) : stateManager.getInterpolatedProgressMs();
-        long durationMs = state.getDurationMs();
-        float ratio = durationMs > 0 ? Math.min(1.0f, (float) progressMs / durationMs) : 0f;
+        float progressRatio = (state.getDurationMs() > 0) ? (progressMs / (float) state.getDurationMs()) : 0f;
+        boolean seekHover = isMouseOver(mouseX, mouseY, seekX - 2, seekY - 4, seekW + 4, 12);
 
-        // Background track (subtle translucent slate)
-        guiGraphics.fill(contentX, seekY, contentX + seekW, seekY + seekH, 0x30FFFFFF);
+        // Seek background track (4px thin pill)
+        AaRoundRect.draw(guiGraphics, seekX, seekY, seekW, 4, 2, 0x24FFFFFF, 0);
 
-        // Filled Theme Accent gradient bar
-        int fillW = (int) (seekW * ratio);
-        if (fillW > 0) {
-            guiGraphics.fillGradient(contentX, seekY, contentX + fillW, seekY + seekH, accent, accent2);
+        // Filled progress track
+        int seekFillW = (int) (seekW * Math.max(0f, Math.min(1f, progressRatio)));
+        if (seekFillW > 0) {
+            AaRoundRect.draw(guiGraphics, seekX, seekY, Math.max(4, seekFillW), 4, 2, accent, 0);
         }
 
-        // Circular Knob
-        int knobX = contentX + fillW;
-        boolean canSeek = state.canSeek();
-        int knobColor = canSeek ? accent : 0xFF555566;
-        guiGraphics.fill(knobX - 3, seekY - 2, knobX + 4, seekY + seekH + 2, knobColor);
-        guiGraphics.fill(knobX - 1, seekY, knobX + 2, seekY + seekH, canSeek ? 0xFFFFFFFF : 0xFF888899);
+        // Pure white circular knob
+        int seekKnobX = seekX + seekFillW;
+        AaRoundRect.draw(guiGraphics, seekKnobX - 5, seekY - 3, 10, 10, 5, 0xFFFFFFFF, seekHover ? accent2 : 0x40000000);
 
-        // Time labels
+        // Time timestamps below seek bar
         String curTime = PlaybackState.formatTime(progressMs);
-        String totTime = PlaybackState.formatTime(durationMs);
-        guiGraphics.drawString(this.font, curTime, contentX, seekY + 8, accent, false);
-        int totX = contentX + seekW - this.font.width(totTime);
-        guiGraphics.drawString(this.font, totTime, totX, seekY + 8, ThemeManager.getTextSecondary(), false);
+        String totTime = PlaybackState.formatTime(state.getDurationMs());
+        guiGraphics.drawString(this.font, curTime, seekX, seekY + 7, ThemeManager.getTextSecondary(), false);
+        int totX = seekX + seekW - this.font.width(totTime);
+        guiGraphics.drawString(this.font, totTime, totX, seekY + 7, ThemeManager.getTextSecondary(), false);
 
-        // 4. Playback Controls Bar
-        int controlsY = seekY + 25;
-        int centerX = modalX + (modalWidth / 2);
+        // 4. Media Playback Controls (Perfect Circles, Symmetric & Vector Icons)
+        int controlsY = seekY + 22;
+        int centerX = contentX + (contentW / 2);
+        int centerY = controlsY + 14;
         int btnSize = 22;
+        int btnCenterY = centerY - (btnSize / 2);
 
-        // A) Shuffle (🔀)
-        int shufX = centerX - 90;
+        int playSize = 30;
+        int playX = centerX - (playSize / 2);
+        int playY = centerY - (playSize / 2);
+
+        int prevX = playX - 10 - btnSize;
+        int nextX = playX + playSize + 10;
+
+        int shufX = prevX - 10 - btnSize;
+        int repX = nextX + btnSize + 10;
+
+        // Shuffle
         boolean canShuf = state.canShuffle();
-        boolean shufHover = isMouseOver(mouseX, mouseY, shufX, controlsY, btnSize, btnSize) && canShuf;
         boolean isShuf = state.isShuffleState();
+        boolean shufHover = isMouseOver(mouseX, mouseY, shufX, btnCenterY, btnSize, btnSize);
         int shufColor = canShuf ? (isShuf ? accent : ThemeManager.getTextSecondary()) : 0xFF555566;
-        renderModernIconButton(guiGraphics, "🔀", shufX, controlsY, btnSize, btnSize, shufHover, shufColor, isShuf && canShuf, canShuf);
+        renderModernIconButton(guiGraphics, "SHUF", shufX, btnCenterY, btnSize, btnSize, shufHover, shufColor, isShuf, canShuf);
 
-        // B) Prev (⏮)
-        int prevX = centerX - 50;
+        // Previous (Vector Stop Bar + Left Triangle)
         boolean canPrev = state.canPrev();
-        boolean prevHover = isMouseOver(mouseX, mouseY, prevX, controlsY, btnSize, btnSize) && canPrev;
-        int prevColor = canPrev ? ThemeManager.getTextPrimary() : 0xFF555566;
-        renderModernIconButton(guiGraphics, "⏮", prevX, controlsY, btnSize, btnSize, prevHover, prevColor, false, canPrev);
+        boolean prevHover = isMouseOver(mouseX, mouseY, prevX, btnCenterY, btnSize, btnSize);
+        int prevColor = canPrev ? (prevHover ? 0xFFFFFFFF : ThemeManager.getTextPrimary()) : 0xFF555566;
+        renderModernIconButton(guiGraphics, "PREV", prevX, btnCenterY, btnSize, btnSize, prevHover, prevColor, false, canPrev);
 
-        // C) Central Play/Pause Disc
-        int playX = centerX - 18;
-        int playW = 36;
-        int playH = 26;
+        // Play / Pause (Large Circular Button 30x30 with Precision Vector Glyphs)
         boolean canPlay = state.canPlayPause();
-        boolean playHover = isMouseOver(mouseX, mouseY, playX, controlsY - 2, playW, playH) && canPlay;
-        String playIcon = state.isPlaying() ? "❚❚" : "▶";
+        boolean playHover = isMouseOver(mouseX, mouseY, playX, playY, playSize, playSize);
+        int playBg = playHover ? accent2 : accent;
+        AaRoundRect.draw(guiGraphics, playX, playY, playSize, playSize, playSize / 2, playBg, 0);
+        String playIconType = state.isPlaying() ? "PAUSE" : "PLAY";
+        renderControlIcon(guiGraphics, playIconType, centerX, centerY, 0xFF0B0F19);
 
-        if (canPlay) {
-            if (state.isPlaying()) {
-                double pulse = Math.sin(now / 180.0) * 0.5 + 0.5;
-                int haloAlpha = (int) (35 + (pulse * 50));
-                guiGraphics.fill(playX - 3, controlsY - 5, playX + playW + 3, controlsY + playH + 3, ThemeManager.applyAlpha(accent, haloAlpha / 255.0f));
-            }
-            guiGraphics.fill(playX + 2, controlsY - 3, playX + playW - 2, controlsY + playH + 1, playHover ? accent2 : accent);
-            guiGraphics.fill(playX, controlsY - 1, playX + playW, controlsY + playH - 1, playHover ? accent2 : accent);
-            guiGraphics.drawCenteredString(this.font, playIcon, playX + (playW / 2), controlsY + 6, 0xFF0B0F19);
-        } else {
-            guiGraphics.fill(playX, controlsY, playX + playW, controlsY + playH, 0xFF1C1C24);
-            guiGraphics.drawCenteredString(this.font, playIcon, playX + (playW / 2), controlsY + 6, 0xFF555566);
-        }
-
-        // D) Next (⏭)
-        int nextX = centerX + 28;
+        // Next (Vector Right Triangle + Stop Bar)
         boolean canNext = state.canNext();
-        boolean nextHover = isMouseOver(mouseX, mouseY, nextX, controlsY, btnSize, btnSize) && canNext;
-        int nextColor = canNext ? ThemeManager.getTextPrimary() : 0xFF555566;
-        renderModernIconButton(guiGraphics, "⏭", nextX, controlsY, btnSize, btnSize, nextHover, nextColor, false, canNext);
+        boolean nextHover = isMouseOver(mouseX, mouseY, nextX, btnCenterY, btnSize, btnSize);
+        int nextColor = canNext ? (nextHover ? 0xFFFFFFFF : ThemeManager.getTextPrimary()) : 0xFF555566;
+        renderModernIconButton(guiGraphics, "NEXT", nextX, btnCenterY, btnSize, btnSize, nextHover, nextColor, false, canNext);
 
-        // E) Loop / Repeat (🔁)
-        int repX = centerX + 68;
+        // Repeat
         boolean canRep = state.canRepeat();
-        boolean repHover = isMouseOver(mouseX, mouseY, repX, controlsY, btnSize, btnSize) && canRep;
-        String repMode = state.getRepeatState();
-        boolean isRep = !"none".equalsIgnoreCase(repMode) && !"off".equalsIgnoreCase(repMode);
-        String repIcon = "track".equalsIgnoreCase(repMode) ? "🔂" : "🔁";
+        String repState = state.getRepeatState();
+        boolean isRep = !"off".equalsIgnoreCase(repState);
+        boolean repHover = isMouseOver(mouseX, mouseY, repX, btnCenterY, btnSize, btnSize);
         int repColor = canRep ? (isRep ? accent : ThemeManager.getTextSecondary()) : 0xFF555566;
-        renderModernIconButton(guiGraphics, repIcon, repX, controlsY, btnSize, btnSize, repHover, repColor, isRep && canRep, canRep);
+        String repIcon = "track".equalsIgnoreCase(repState) ? "REP1" : "REP";
+        renderModernIconButton(guiGraphics, repIcon, repX, btnCenterY, btnSize, btnSize, repHover, repColor, isRep, canRep);
 
-        // 5. Volume Slider Row
-        int volY = controlsY + 32;
-        int volBarW = 110;
-        int volBarH = 4;
-        int volStartX = centerX - 80;
-        int volBarX = volStartX + 18;
-
-        int curVol = isDraggingVolume ? (int) (dragVolumeRatio * 100) : (state.getVolumePercent() >= 0 ? state.getVolumePercent() : config.getVolume());
-        curVol = Math.max(0, Math.min(100, curVol));
-
-        String speakerIcon = curVol == 0 ? "🔇" : (curVol < 50 ? "🔉" : "🔊");
-        boolean speakerHover = isMouseOver(mouseX, mouseY, volStartX - 4, volY - 3, 16, 14);
-        guiGraphics.drawString(this.font, speakerIcon, volStartX, volY - 2, speakerHover ? accent2 : accent, true);
-
-        guiGraphics.fill(volBarX, volY, volBarX + volBarW, volY + volBarH, 0x30FFFFFF);
-        float volRatio = curVol / 100.0f;
-        int volFillW = (int) (volBarW * volRatio);
-        if (volFillW > 0) {
-            guiGraphics.fillGradient(volBarX, volY, volBarX + volFillW, volY + volBarH, accent, accent2);
+        // 5. Volume Slider
+        if (!isDraggingVolume && state.getVolumePercent() >= 0) {
+            this.dragVolumeRatio = Math.max(0f, Math.min(1f, state.getVolumePercent() / 100.0f));
         }
+        int volY = controlsY + 36;
+        int volBarW = 100;
+        int volBarX = centerX - (volBarW / 2);
+        boolean volHover = isMouseOver(mouseX, mouseY, volBarX, volY, volBarW, 12);
+        int curVol = Math.round(dragVolumeRatio * 100);
 
-        int volKnobX = volBarX + volFillW;
-        guiGraphics.fill(volKnobX - 2, volY - 2, volKnobX + 3, volY + volBarH + 2, accent);
-        guiGraphics.fill(volKnobX - 1, volY - 1, volKnobX + 2, volY + volBarH + 1, 0xFFFFFFFF);
+        guiGraphics.drawString(this.font, "VOL", volBarX - 22, volY - 2, volHover ? 0xFFFFFFFF : ThemeManager.getTextSecondary(), false);
+
+        // Volume track
+        AaRoundRect.draw(guiGraphics, volBarX, volY, volBarW, 4, 2, 0x24FFFFFF, 0);
+        int volFill = (int) (volBarW * dragVolumeRatio);
+        if (volFill > 0) {
+            AaRoundRect.draw(guiGraphics, volBarX, volY, Math.max(4, volFill), 4, 2, accent, 0);
+        }
+        AaRoundRect.draw(guiGraphics, volBarX + volFill - 4, volY - 2, 8, 8, 4, 0xFFFFFFFF, volHover ? accent : 0);
 
         String volText = curVol + "%";
         guiGraphics.drawString(this.font, volText, volBarX + volBarW + 8, volY - 2, ThemeManager.getTextSecondary(), false);
+
+        // 6. Beat-synced Audio Waveform Visualizer (tall, vibrant & volume-scaled)
+        int visualBaselineY = modalY + modalHeight - 12;
+        int visualMaxHeight = 46;
+        boolean hasLyric = LyricsManager.getInstance().getCurrentLyrics() != null
+                && LyricsManager.getInstance().getCurrentLyrics().getActiveIndex(stateManager.getInterpolatedProgressMs()) >= 0;
+        AudioWaveformRenderer.renderSyncedWaveform(
+                guiGraphics, contentX + 6, visualBaselineY, contentW - 12, visualMaxHeight,
+                30, state.isPlaying(), stateManager.getInterpolatedProgressMs(), 0.85f, accent, accent2,
+                state.getTrackName(), state.getArtistNames(), hasLyric, dragVolumeRatio
+        );
     }
+
+    // =========================================================================
+    // TAB 2: LYRICS
+    // =========================================================================
 
     private void renderLyricsTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
-        int contentH = modalHeight - 64;
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int contentH = modalHeight - 54;
+        int accent = ThemeManager.getAccent();
 
-        LyricsManager.SongLyrics lyrics = LyricsManager.getInstance().getCurrentLyrics();
-        PlaybackState state = stateManager.getCurrentState();
+        LyricsManager lyricsManager = LyricsManager.getInstance();
+        LyricsManager.SongLyrics songLyrics = lyricsManager.getCurrentLyrics();
+        List<LyricLine> lyrics = (songLyrics != null && songLyrics.isSynced()) ? songLyrics.getLines() : null;
 
-        if (state == null) {
-            guiGraphics.drawCenteredString(this.font, "No track currently playing.", modalX + (modalWidth / 2), modalY + 110, ThemeManager.getTextSecondary());
+        if (lyrics == null || lyrics.isEmpty()) {
+            int cx = contentX + (contentW / 2);
+            renderGlassCard(guiGraphics, contentX, contentY + 20, contentW, 110, false, false);
+            guiGraphics.drawCenteredString(this.font, "No synced lyrics available for this song.", cx, contentY + 48, ThemeManager.getTextSecondary());
+            guiGraphics.drawCenteredString(this.font, "Checking LRCLib database automatically...", cx, contentY + 64, accent);
             return;
         }
-
-        if (lyrics == null || (lyrics.getLines().isEmpty() && lyrics.getPlainLyrics().isEmpty())) {
-            guiGraphics.drawCenteredString(this.font, "Searching lyrics for " + state.getTrackName() + "...",
-                    modalX + (modalWidth / 2), modalY + 110, ThemeManager.getAccent());
-            return;
-        }
-
-        renderGlassCard(guiGraphics, contentX, contentY, contentW, contentH, false, false);
-
-        guiGraphics.enableScissor(contentX + 2, contentY + 2, contentX + contentW - 2, contentY + contentH - 2);
 
         long progressMs = stateManager.getInterpolatedProgressMs();
-        int activeIdx = lyrics.getActiveIndex(progressMs);
+        int activeIdx = songLyrics.getActiveIndex(progressMs);
 
-        if (lyrics.isSynced()) {
-            List<LyricLine> lines = lyrics.getLines();
-            int lineHeight = 22;
-            int totalHeight = lines.size() * lineHeight;
+        guiGraphics.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
 
-            int targetScroll = (activeIdx * lineHeight) - (contentH / 2) + 12;
-            targetScroll = Math.max(0, Math.min(totalHeight - contentH + 30, targetScroll));
+        int lineHeight = 22;
+        int totalHeight = lyrics.size() * lineHeight;
 
-            lyricsScrollY += (targetScroll - lyricsScrollY) * 0.18f;
-            int lineY = contentY + 12 - lyricsScrollY;
-            int maxTextW = contentW - 38;
+        int targetScroll = (activeIdx * lineHeight) - (contentH / 2) + 12;
+        targetScroll = Math.max(0, Math.min(totalHeight - contentH + 30, targetScroll));
 
-            for (int i = 0; i < lines.size(); i++) {
-                LyricLine line = lines.get(i);
-                boolean isActive = (i == activeIdx);
+        lyricsScrollY += (targetScroll - lyricsScrollY) * 0.18f;
+        int lineY = contentY + 12 - lyricsScrollY;
+        int maxTextW = contentW - 32;
 
-                if (lineY + lineHeight >= contentY - 4 && lineY <= contentY + contentH + 4) {
-                    String clean = line.getText().replaceAll("(?i)§[0-9a-fk-orx]", "").trim();
-                    Component lineComp = Component.literal(clean).withStyle(config.getLyricFont().getStyle());
-                    int textW = this.font.width(lineComp);
+        for (int i = 0; i < lyrics.size(); i++) {
+            LyricLine line = lyrics.get(i);
+            boolean isActive = (i == activeIdx);
 
-                    if (isActive) {
-                        // Glowing Pill Capsule
-                        guiGraphics.fill(contentX + 6, lineY - 2, contentX + contentW - 6, lineY + 17, ThemeManager.getAccentDim(1.0f));
-                        guiGraphics.fill(contentX + 6, lineY - 2, contentX + 9, lineY + 17, ThemeManager.getAccent());
-                        guiGraphics.drawString(this.font, "♪", contentX + 13, lineY + 2, ThemeManager.getAccent(), true);
-
-                        int textStartX = contentX + 25;
-                        if (textW > maxTextW) {
-                            float textScale = (float) maxTextW / (float) textW;
-                            guiGraphics.pose().pushMatrix();
-                            guiGraphics.pose().translate((float) textStartX, (float) (lineY + 2));
-                            guiGraphics.pose().scale(textScale, textScale);
-                            guiGraphics.drawString(this.font, lineComp, 0, 0, 0xFFFFFFFF, true);
-                            guiGraphics.pose().popMatrix();
-                        } else {
-                            guiGraphics.drawString(this.font, lineComp, textStartX, lineY + 2, 0xFFFFFFFF, true);
-                        }
-                    } else {
-                        int color = (i < activeIdx) ? ThemeManager.getTextMuted() : ThemeManager.getTextSecondary();
-                        int textStartX = contentX + 25;
-                        if (textW > maxTextW) {
-                            float textScale = (float) maxTextW / (float) textW;
-                            guiGraphics.pose().pushMatrix();
-                            guiGraphics.pose().translate((float) textStartX, (float) (lineY + 2));
-                            guiGraphics.pose().scale(textScale, textScale);
-                            guiGraphics.drawString(this.font, lineComp, 0, 0, color, true);
-                            guiGraphics.pose().popMatrix();
-                        } else {
-                            guiGraphics.drawString(this.font, lineComp, textStartX, lineY + 2, color, true);
-                        }
-                    }
+            if (lineY >= contentY - lineHeight && lineY <= contentY + contentH + lineHeight) {
+                String text = line.getText();
+                if (this.font.width(text) > maxTextW) {
+                    text = trimWithEllipsis(text, maxTextW);
                 }
-                lineY += lineHeight;
-            }
-        } else {
-            String[] plainLines = lyrics.getPlainLyrics().split("\\r?\\n");
-            int lineY = contentY + 12 - lyricsScrollY;
-            int maxTextW = contentW - 24;
-            for (String pl : plainLines) {
-                String clean = pl.replaceAll("(?i)§[0-9a-fk-orx]", "").trim();
-                if (lineY + 18 >= contentY && lineY <= contentY + contentH) {
-                    Component plComp = Component.literal(clean).withStyle(config.getLyricFont().getStyle());
-                    int textW = this.font.width(plComp);
-                    if (textW > maxTextW) {
-                        float textScale = (float) maxTextW / (float) textW;
-                        guiGraphics.pose().pushMatrix();
-                        guiGraphics.pose().translate((float) (contentX + 12), (float) lineY);
-                        guiGraphics.pose().scale(textScale, textScale);
-                        guiGraphics.drawString(this.font, plComp, 0, 0, 0xFFFFFFFF, true);
-                        guiGraphics.pose().popMatrix();
-                    } else {
-                        guiGraphics.drawString(this.font, plComp, contentX + 12, lineY, 0xFFFFFFFF, true);
-                    }
+
+                if (isActive) {
+                    // Glowing active line card
+                    AaRoundRect.draw(guiGraphics, contentX + 2, lineY - 2, contentW - 4, 20, 6, ThemeManager.getAccentDim(0.24f), ThemeManager.applyAlpha(accent, 0.55f));
+                    guiGraphics.drawCenteredString(this.font, text, contentX + (contentW / 2), lineY + 3, 0xFFFFFFFF);
+                } else {
+                    int dist = Math.abs(i - activeIdx);
+                    int alpha = Math.max(50, 210 - (dist * 40));
+                    int color = ThemeManager.applyAlpha(ThemeManager.getTextSecondary(), alpha / 255.0f);
+                    guiGraphics.drawCenteredString(this.font, text, contentX + (contentW / 2), lineY + 3, color);
                 }
-                lineY += 18;
             }
+            lineY += lineHeight;
         }
 
         guiGraphics.disableScissor();
+
+        // Scrollbar
+        renderScrollbar(guiGraphics, contentX + contentW - 6, contentY + 4, contentH - 8, totalHeight, lyricsScrollY);
     }
+
+    // =========================================================================
+    // TAB 3: QUEUE
+    // =========================================================================
 
     private void renderQueueTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
-        int contentH = modalHeight - 64;
-
-        PlaybackState curState = stateManager.getCurrentState();
-
-        renderGlassCard(guiGraphics, contentX, contentY, contentW, contentH, false, false);
-
-        guiGraphics.enableScissor(contentX + 4, contentY + 4, contentX + contentW - 4, contentY + contentH - 4);
-        int currentY = contentY + 10 - queueScrollY;
-
-        if (curState != null) {
-            guiGraphics.drawString(this.font, "CURRENTLY PLAYING", contentX + 10, currentY, ThemeManager.getAccent(), true);
-            currentY += 14;
-
-            // Rounded Mini Card
-            renderGlassCard(guiGraphics, contentX + 8, currentY, contentW - 16, 36, false, true);
-
-            guiGraphics.drawString(this.font, curState.getTrackName(), contentX + 16, currentY + 6, ThemeManager.getAccent(), true);
-            String dur = PlaybackState.formatTime(curState.getDurationMs());
-            guiGraphics.drawString(this.font, dur, contentX + contentW - this.font.width(dur) - 16, currentY + 6, ThemeManager.getTextSecondary(), false);
-
-            guiGraphics.drawString(this.font, curState.getArtistNames() + " • " + curState.getAlbumName(), contentX + 16, currentY + 19, ThemeManager.getTextPrimary(), false);
-            currentY += 46;
-        }
-
-        guiGraphics.drawString(this.font, "DIRECT SPOTIFY QUEUE", contentX + 10, currentY, ThemeManager.getAccent(), true);
-        currentY += 14;
-        guiGraphics.drawString(this.font, "Playback is synchronized in real-time with your desktop Spotify application.", contentX + 10, currentY, ThemeManager.getTextSecondary(), false);
-        currentY += 14;
-        guiGraphics.drawString(this.font, "Use Next (⏭) and Prev (⏮) controls to navigate your playlist queue.", contentX + 10, currentY, ThemeManager.getTextPrimary(), false);
-
-        // Modern Force Refresh Button
-        int refBtnX = contentX + 10;
-        int refBtnY = currentY + 20;
-        boolean refHover = isMouseOver(mouseX, mouseY, refBtnX, refBtnY, 160, 24);
-        renderGlassCard(guiGraphics, refBtnX, refBtnY, 160, 24, refHover, false);
-        guiGraphics.drawCenteredString(this.font, "🔄 Force Refresh Bridge", refBtnX + 80, refBtnY + 8, refHover ? ThemeManager.getAccent2() : ThemeManager.getAccent());
-
-        guiGraphics.disableScissor();
-    }
-
-    /**
-     * Renders the brand-new THEMES category requested by the user.
-     * Offers Aurora Liquid Glass, Midnight, OLED, Daylight, Sunset, and Cyber Gold looks,
-     * along with accent color palette swatches and glass opacity controls.
-     */
-    private void renderThemesTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
-        int contentH = modalHeight - 64;
-
-        guiGraphics.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
-
-        int curY = contentY + 2 - themesScrollY;
-        int accent = ThemeManager.getAccent();
-        ThemeLook currentLook = config.getThemeLook();
-        ThemeAccent currentAccent = config.getThemeAccent();
-
-        // 1. SECTION: THEME PRESETS (LOOKS)
-        guiGraphics.drawString(this.font, "✦ THEME ATMOSPHERE", contentX + 2, curY, accent, true);
-        guiGraphics.drawString(this.font, "Select liquid glass style & atmosphere", contentX + 140, curY + 1, ThemeManager.getTextMuted(), false);
-        curY += 14;
-
-        ThemeLook[] looks = ThemeLook.values();
-        int cardW = (contentW - 6) / 2;
-        int cardH = 34;
-
-        for (int i = 0; i < looks.length; i++) {
-            ThemeLook look = looks[i];
-            int col = i % 2;
-            int row = i / 2;
-            int cardX = contentX + (col * (cardW + 6));
-            int cardY = curY + (row * (cardH + 5));
-
-            boolean isActive = (look == currentLook);
-            boolean hover = isMouseOver(mouseX, mouseY, cardX, cardY, cardW, cardH);
-
-            renderGlassCard(guiGraphics, cardX, cardY, cardW, cardH, hover, isActive);
-
-            // Left active indicator pill
-            if (isActive) {
-                guiGraphics.fill(cardX + 1, cardY + 3, cardX + 3, cardY + cardH - 3, look.getAccentColor());
-            }
-
-            // Theme Name & Subtitle
-            guiGraphics.drawString(this.font, look.getTitle(), cardX + 8, cardY + 5, isActive ? look.getAccentColor() : ThemeManager.getTextPrimary(), true);
-            guiGraphics.drawString(this.font, look.getSubtitle(), cardX + 8, cardY + 18, ThemeManager.getTextMuted(), false);
-
-            // 3 Color Swatch Preview Dots (Window, Card, Accent)
-            int dotRight = cardX + cardW - 10;
-            int dotY = cardY + 12;
-            guiGraphics.fill(dotRight - 28, dotY, dotRight - 20, dotY + 8, 0xFF000000 | look.getWindowRgb());
-            guiGraphics.fill(dotRight - 18, dotY, dotRight - 10, dotY + 8, 0xFF000000 | look.getCardRgb());
-            guiGraphics.fill(dotRight - 8, dotY, dotRight, dotY + 8, look.getAccentColor());
-
-            // Active badge
-            if (isActive) {
-                guiGraphics.drawString(this.font, "●", dotRight - 38, cardY + 6, look.getAccentColor(), true);
-            }
-        }
-
-        curY += (looks.length / 2) * (cardH + 5) + 8;
-
-        // 2. SECTION: ACCENT PALETTE
-        guiGraphics.drawString(this.font, "✦ ACCENT OVERRIDE", contentX + 2, curY, accent, true);
-        guiGraphics.drawString(this.font, "Customize the primary glowing accent", contentX + 130, curY + 1, ThemeManager.getTextMuted(), false);
-        curY += 14;
-
-        ThemeAccent[] accents = ThemeAccent.values();
-        int swatchSize = 20;
-        int swatchSpacing = (contentW - (accents.length * swatchSize)) / (accents.length - 1);
-
-        for (int i = 0; i < accents.length; i++) {
-            ThemeAccent a = accents[i];
-            int sx = contentX + (i * (swatchSize + swatchSpacing));
-            int sy = curY;
-
-            boolean isCurrent = (a == currentAccent);
-            boolean hover = isMouseOver(mouseX, mouseY, sx, sy, swatchSize, swatchSize);
-
-            // Swatch background disc
-            int col = (a == ThemeAccent.MATCH_THEME) ? currentLook.getAccentColor() : a.getColor();
-
-            if (hover || isCurrent) {
-                guiGraphics.fill(sx - 1, sy - 1, sx + swatchSize + 1, sy + swatchSize + 1, isCurrent ? accent : 0x88FFFFFF);
-            }
-
-            guiGraphics.fill(sx, sy, sx + swatchSize, sy + swatchSize, col);
-
-            if (a == ThemeAccent.MATCH_THEME) {
-                guiGraphics.drawCenteredString(this.font, "↺", sx + (swatchSize / 2), sy + 5, 0xFF0B0F19);
-            } else if (isCurrent) {
-                guiGraphics.drawCenteredString(this.font, "✓", sx + (swatchSize / 2), sy + 5, 0xFF0B0F19);
-            }
-
-            if (hover) {
-                // Tooltip label above swatch
-                guiGraphics.drawCenteredString(this.font, a.getTitle(), sx + (swatchSize / 2), sy - 10, accent);
-            }
-        }
-
-        curY += swatchSize + 14;
-
-        // 3. SECTION: GLASS & HUD INTEGRATION CARDS
-        guiGraphics.drawString(this.font, "✦ GLASS & HUD INTEGRATION", contentX + 2, curY, accent, true);
-        curY += 13;
-
-        // Card A: Glass Opacity Slider
-        int cardRowH = 26;
-        renderGlassCard(guiGraphics, contentX, curY, contentW, cardRowH, false, false);
-        guiGraphics.drawString(this.font, "Window Glass Opacity", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Adjust window transparency & blur", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-
-        int sliderW = 120;
-        int sliderX = contentX + contentW - sliderW - 10;
-        int opacityPercent = isDraggingGlassOpacity ? Math.round(40 + dragGlassOpacityRatio * 60) : config.getGlassOpacityPercent();
-        float opacRatio = (opacityPercent - 40) / 60.0f;
-        boolean opacHover = isMouseOver(mouseX, mouseY, sliderX, curY + 6, sliderW, 14);
-        renderSlider(guiGraphics, sliderX, curY + 8, sliderW, 4, opacRatio, opacityPercent + "%", opacHover);
-
-        curY += cardRowH + 6;
-
-        // Card B: Sync HUD & Sky Lyrics Toggle
-        renderGlassCard(guiGraphics, contentX, curY, contentW, cardRowH, false, false);
-        guiGraphics.drawString(this.font, "Sync HUD & 3D Celestial Sky", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Apply active theme colors to In-Game HUD & Sky Lyrics", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-
-        int switchW = 44;
-        int switchH = 14;
-        int switchX = contentX + contentW - switchW - 10;
-        boolean switchHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.isSyncHudTheme(), switchX, curY + 6, switchW, switchH, switchHover);
-
-        guiGraphics.disableScissor();
-    }
-
-    private void renderSettingsTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
-        int contentH = modalHeight - 64;
-
-        guiGraphics.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
-
-        int curY = contentY + 2 - settingsScrollY;
-        int rowH = 26;
-        int controlW = 120;
-        int controlX = contentX + contentW - controlW - 10;
-        int switchW = 44;
-        int switchH = 14;
-        int switchX = contentX + contentW - switchW - 10;
-
-        // 1. In-Game HUD Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "In-Game HUD Overlay", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Position: " + config.getHudPosition().getDisplayName(), contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean hudHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.getHudPosition() != ModConfig.HudPosition.OFF, switchX, curY + 6, switchW, switchH, hudHover);
-        curY += rowH + 4;
-
-        // 1b. HUD Lyrics Line Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "HUD Lyrics Line", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Display active lyric line under the HUD card", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean hudLyricsHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.isHudShowLyrics(), switchX, curY + 6, switchW, switchH, hudLyricsHover);
-        curY += rowH + 4;
-
-        // 2. HUD Opacity Slider Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "HUD Opacity", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Translucency of overlay", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        int opacPercent = isDraggingHudOpacity ? Math.round(dragHudOpacityRatio * 100) : config.getHudOpacityPercent();
-        float opacRatio = opacPercent / 100.0f;
-        boolean opacHover = isMouseOver(mouseX, mouseY, controlX, curY + 6, controlW, 14);
-        String opacLabel = (opacPercent == 0) ? "0% (Hidden)" : (opacPercent + "%");
-        renderSlider(guiGraphics, controlX, curY + 8, controlW, 4, opacRatio, opacLabel, opacHover);
-        curY += rowH + 4;
-
-        // 3. HUD Scale Slider Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "HUD Scale", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Size of the in-game overlay", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        int scalePercent = isDraggingHudScale ? Math.round(50 + dragHudScaleRatio * 100) : config.getHudScalePercent();
-        float scaleRatio = (scalePercent - 50) / 100.0f;
-        boolean scaleHover = isMouseOver(mouseX, mouseY, controlX, curY + 6, controlW, 14);
-        renderSlider(guiGraphics, controlX, curY + 8, controlW, 4, scaleRatio, scalePercent + "%", scaleHover);
-        curY += rowH + 4;
-
-        // 4. 360° Sky Lyrics (Cielo) Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "360° Celestial Sky Lyrics (Cielo)", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Display synced lyrics across the sky", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean skyHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.isSkyLyricsEnabled(), switchX, curY + 6, switchW, switchH, skyHover);
-        curY += rowH + 4;
-
-        // 4b. Sky Lyrics Direction / Mode Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Sky Lyrics Direction", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Orientation: " + config.getSkyLyricsMode().getDisplayName(), contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean skyDirHover = isMouseOver(mouseX, mouseY, controlX, curY + 4, controlW, 18);
-        renderPillButton(guiGraphics, config.getSkyLyricsMode().getDisplayName(), controlX, curY + 4, controlW, 18, skyDirHover);
-        curY += rowH + 4;
-
-        // 5. Sky Lyrics Scale Slider Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Sky Lyrics Scale", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Celestial text size in sky dome", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        int skyScalePercent = isDraggingSkyScale ? Math.round(50 + dragSkyScaleRatio * 150) : config.getSkyLyricsScalePercent();
-        float skyScaleRatio = (skyScalePercent - 50) / 150.0f;
-        boolean skyScaleHover = isMouseOver(mouseX, mouseY, controlX, curY + 6, controlW, 14);
-        renderSlider(guiGraphics, controlX, curY + 8, controlW, 4, skyScaleRatio, skyScalePercent + "%", skyScaleHover);
-        curY += rowH + 4;
-
-        // 6. Sky Visible Lines Slider Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Sky Visible Lines", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Number of lyric lines shown simultaneously", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        int skyLines = isDraggingSkyLines ? Math.round(3 + dragSkyLinesRatio * 22) : config.getSkyLyricsLength();
-        float skyLinesRatio = (skyLines - 3) / 22.0f;
-        boolean skyLinesHover = isMouseOver(mouseX, mouseY, controlX, curY + 6, controlW, 14);
-        renderSlider(guiGraphics, controlX, curY + 8, controlW, 4, skyLinesRatio, skyLines + " lines", skyLinesHover);
-        curY += rowH + 4;
-
-        // 7. Lyrics Typography Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Lyrics Typography", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Font family for lyrics & UI elements", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean fontHover = isMouseOver(mouseX, mouseY, controlX, curY + 4, controlW, 18);
-        renderPillButton(guiGraphics, config.getLyricFont().getDisplayName(), controlX, curY + 4, controlW, 18, fontHover);
-        curY += rowH + 4;
-
-        // 8. Minecraft Audio Ducking Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Minecraft Audio Ducking", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Mute MC music & lower sounds during playback", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean duckHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.isAudioDuckingEnabled(), switchX, curY + 6, switchW, switchH, duckHover);
-        curY += rowH + 4;
-
-        // 9. Ducking Multiplier Slider Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Ducking Volume Multiplier", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Game volume level while Spotify is playing", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        int duckPercent = isDraggingDucking ? Math.round(5 + dragDuckingRatio * 95) : Math.round(config.getDuckingMultiplier() * 100);
-        float duckRatio = (duckPercent - 5) / 95.0f;
-        boolean duckSliderHover = isMouseOver(mouseX, mouseY, controlX, curY + 6, controlW, 14);
-        renderSlider(guiGraphics, controlX, curY + 8, controlW, 4, duckRatio, duckPercent + "%", duckSliderHover);
-        curY += rowH + 8;
-
-        // 9b. Anonymous Diagnostics Card
-        renderGlassCard(guiGraphics, contentX, curY, contentW, rowH, false, false);
-        guiGraphics.drawString(this.font, "Anonymous Diagnostics", contentX + 10, curY + 5, ThemeManager.getTextPrimary(), false);
-        guiGraphics.drawString(this.font, "Share anonymized crash and stability metrics", contentX + 10, curY + 15, ThemeManager.getTextMuted(), false);
-        boolean metricsHover = isMouseOver(mouseX, mouseY, switchX, curY + 6, switchW, switchH);
-        renderPillSwitch(guiGraphics, config.isMetricsEnabled(), switchX, curY + 6, switchW, switchH, metricsHover);
-        curY += rowH + 4;
-
-        // 10. Utility Actions Card (Reload Bridge & Updates)
-        int btnW = (contentW - 6) / 2;
-        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX, curY, btnW, 22);
-        renderGlassCard(guiGraphics, contentX, curY, btnW, 22, reloadHover, false);
-        guiGraphics.drawCenteredString(this.font, "↺ Reload Bridge", contentX + (btnW / 2), curY + 7, reloadHover ? ThemeManager.getAccent2() : ThemeManager.getAccent());
-
-        it.itzcrih.espoty.update.UpdateChecker updateChecker = it.itzcrih.espoty.update.UpdateChecker.getInstance();
-        boolean hasUpdate = updateChecker.isUpdateAvailable();
-        int btn2X = contentX + btnW + 6;
-        boolean updateHover = isMouseOver(mouseX, mouseY, btn2X, curY, btnW, 22);
-        renderGlassCard(guiGraphics, btn2X, curY, btnW, 22, updateHover, hasUpdate);
-        String updateLabel = hasUpdate ? "Update v" + updateChecker.getLatestVersion() + " Available!" : "Check for Updates";
-        guiGraphics.drawCenteredString(this.font, updateLabel, btn2X + (btnW / 2), curY + 7, hasUpdate ? 0xFF00FFA3 : (updateHover ? ThemeManager.getAccent2() : ThemeManager.getTextPrimary()));
-
-        curY += 28;
-
-        // Author credits link
-        String credit = "§7eSpoty v" + it.itzcrih.espoty.update.UpdateChecker.getCurrentVersion() + " by §6itzCrih §8• §ehttps://itzcrih.it";
-        boolean creditHover = isMouseOver(mouseX, mouseY, contentX + 2, curY, 280, 12);
-        guiGraphics.drawString(this.font, credit, contentX + 2, curY, creditHover ? 0xFFFFFFFF : ThemeManager.getTextMuted(), false);
-
-        guiGraphics.disableScissor();
-    }
-
-    // =========================================================================
-    // AURORA CLIENT REUSABLE UI WIDGETS
-    // =========================================================================
-
-    private void renderGlassCard(GuiGraphics g, int x, int y, int w, int h, boolean hover, boolean active) {
-        int bg = hover ? ThemeManager.getCardHoverBg() : ThemeManager.getCardBg();
-        int border = active ? ThemeManager.getAccent() : (hover ? ThemeManager.applyAlpha(ThemeManager.getAccent(), 0.40f) : ThemeManager.getGlassEdge());
-
-        // Rounded body
-        g.fill(x + 2, y, x + w - 2, y + h, bg);
-        g.fill(x, y + 2, x + 2, y + h - 2, bg);
-        g.fill(x + w - 2, y + 2, x + w, y + h - 2, bg);
-
-        // 1px Subtle Glass Border
-        g.fill(x + 2, y, x + w - 2, y + 1, border);
-        g.fill(x + 2, y + h - 1, x + w - 2, y + h, border);
-        g.fill(x, y + 2, x + 1, y + h - 2, border);
-        g.fill(x + w - 1, y + 2, x + w, y + h - 2, border);
-
-        // Active halo glow
-        if (active) {
-            int glow = ThemeManager.getAccentDim(0.50f);
-            g.fill(x + 1, y + 1, x + w - 1, y + h - 1, glow);
-        }
-    }
-
-    private void renderPillSwitch(GuiGraphics g, boolean enabled, int x, int y, int w, int h, boolean hover) {
-        int accent = ThemeManager.getAccent();
-        int bg = enabled ? (hover ? ThemeManager.getAccent2() : accent) : (hover ? 0x40FFFFFF : 0x22FFFFFF);
-        int border = enabled ? accent : 0x33FFFFFF;
-
-        // Rounded capsule track
-        g.fill(x + 2, y, x + w - 2, y + h, bg);
-        g.fill(x, y + 2, x + 2, y + h - 2, bg);
-        g.fill(x + w - 2, y + 2, x + w, y + h - 2, bg);
-
-        g.fill(x + 2, y, x + w - 2, y + 1, border);
-        g.fill(x + 2, y + h - 1, x + w - 2, y + h, border);
-
-        // Smooth Knob (Circle on left if disabled, right if enabled)
-        int knobSize = h - 4;
-        int knobX = enabled ? (x + w - knobSize - 3) : (x + 3);
-        int knobY = y + 2;
-        int knobCol = enabled ? 0xFF0B0F19 : 0xFFCBD5E1;
-
-        g.fill(knobX, knobY, knobX + knobSize, knobY + knobSize, knobCol);
-    }
-
-    private void renderSlider(GuiGraphics g, int x, int y, int w, int h, float ratio, String label, boolean hover) {
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int contentH = modalHeight - 54;
         int accent = ThemeManager.getAccent();
         int accent2 = ThemeManager.getAccent2();
 
-        // Background track
-        g.fill(x, y, x + w, y + h, 0x30FFFFFF);
+        QueueResponse queue = stateManager.getCurrentQueue();
+        List<QueueItem> items = (queue != null && queue.getQueue() != null) ? queue.getQueue() : Collections.emptyList();
 
-        // Filled track
-        int fillW = (int) (w * Math.max(0f, Math.min(1f, ratio)));
-        if (fillW > 0) {
-            g.fillGradient(x, y, x + fillW, y + h, accent, accent2);
+        // 1. Top Action Bar: Header + Refresh Button
+        int headerY = contentY;
+        int refreshW = 58;
+        int refreshH = 18;
+        int refreshX = contentX + contentW - refreshW - 14;
+        boolean refreshHover = isMouseOver(mouseX, mouseY, refreshX, headerY, refreshW, refreshH);
+        renderButton(guiGraphics, "↺ Refresh", refreshX, headerY, refreshW, refreshH, refreshHover);
+
+        String countText = items.isEmpty() ? "NO UPCOMING TRACKS" : "UPCOMING QUEUE (" + items.size() + ")";
+        guiGraphics.drawString(this.font, countText, contentX + 2, headerY + 5, accent, true);
+
+        int listTopY = headerY + 22;
+        int listH = contentH - 22;
+
+        if (items.isEmpty() && (queue == null || queue.getCurrentlyPlaying() == null)) {
+            int cx = contentX + (contentW / 2);
+            renderGlassCard(guiGraphics, contentX, listTopY + 12, contentW - 14, 110, false, false);
+            guiGraphics.drawCenteredString(this.font, "Spotify queue is currently empty.", cx, listTopY + 42, ThemeManager.getTextSecondary());
+            guiGraphics.drawCenteredString(this.font, "Queue tracks in Spotify or click '↺ Refresh'.", cx, listTopY + 58, accent);
+            return;
         }
 
-        // Circular knob
-        int knobX = x + fillW;
-        int knobCol = hover ? accent2 : accent;
-        g.fill(knobX - 3, y - 3, knobX + 4, y + h + 3, knobCol);
-        g.fill(knobX - 1, y - 1, knobX + 2, y + h + 1, 0xFFFFFFFF);
+        guiGraphics.enableScissor(contentX, listTopY, contentX + contentW, listTopY + listH);
 
-        // Label pill on right
-        if (label != null && !label.isEmpty()) {
-            g.drawString(this.font, label, x + w + 8, y - 2, ThemeManager.getTextSecondary(), false);
+        int curY = listTopY + 2 - queueScrollY;
+        int cardW = contentW - 14;
+
+        // Currently Playing Card (if available)
+        QueueItem cp = (queue != null) ? queue.getCurrentlyPlaying() : null;
+        if (cp == null && stateManager.getCurrentState() != null) {
+            PlaybackState s = stateManager.getCurrentState();
+            if (s.getTrackName() != null && !s.getTrackName().isEmpty()) {
+                cp = new QueueItem(s.getTrackId(), s.getTrackName(), s.getArtistNames(), s.getAlbumName(), s.getAlbumArtUrl(), s.getDurationMs());
+            }
+        }
+
+        if (cp != null && cp.getName() != null && !cp.getName().isEmpty()) {
+            int cpH = 34;
+            AaRoundRect.draw(guiGraphics, contentX, curY, cardW, cpH, 7, ThemeManager.getAccentDim(0.20f), accent);
+            guiGraphics.drawString(this.font, "▶ NOW PLAYING", contentX + 8, curY + 5, accent, true);
+            String npText = trimWithEllipsis(cp.getName() + " — " + cp.getArtists(), cardW - 20);
+            guiGraphics.drawString(this.font, npText, contentX + 8, curY + 18, 0xFFFFFFFF, false);
+            curY += cpH + 6;
+        }
+
+        int rowH = 30;
+        int btnSize = 16;
+        int totalItems = items.size();
+
+        for (int i = 0; i < totalItems; i++) {
+            QueueItem item = items.get(i);
+            int rowY = curY;
+
+            if (rowY >= listTopY - rowH && rowY <= listTopY + listH + rowH) {
+                boolean rowHover = isMouseOver(mouseX, mouseY, contentX, rowY, cardW, rowH);
+
+                int bg = rowHover ? ThemeManager.getCardHoverBg() : ThemeManager.getCardBg();
+                int border = rowHover ? ThemeManager.applyAlpha(accent, 0.65f) : ThemeManager.getGlassEdge();
+                AaRoundRect.draw(guiGraphics, contentX, rowY, cardW, rowH, 6, bg, border);
+
+                // Index Tag
+                String idxStr = "#" + (i + 1);
+                guiGraphics.drawString(this.font, idxStr, contentX + 8, rowY + 10, ThemeManager.getTextMuted(), false);
+
+                // Action Buttons on Right: [^] [v] [x]
+                int actionX = contentX + cardW - 6 - (btnSize * 3 + 8);
+                int btnY = rowY + 7;
+
+                // Move Up Button (▲)
+                boolean canMoveUp = (i > 0);
+                int upX = actionX;
+                boolean upHover = canMoveUp && isMouseOver(mouseX, mouseY, upX, btnY, btnSize, btnSize);
+                if (canMoveUp) {
+                    int upBg = upHover ? ThemeManager.getAccentDim(0.35f) : 0x14FFFFFF;
+                    int upBorder = upHover ? accent : 0x22FFFFFF;
+                    AaRoundRect.draw(guiGraphics, upX, btnY, btnSize, btnSize, 4, upBg, upBorder);
+                    guiGraphics.drawCenteredString(this.font, "▲", upX + (btnSize / 2), btnY + 3, upHover ? accent : ThemeManager.getTextSecondary());
+                }
+
+                // Move Down Button (▼)
+                boolean canMoveDown = (i < totalItems - 1);
+                int downX = upX + btnSize + 4;
+                boolean downHover = canMoveDown && isMouseOver(mouseX, mouseY, downX, btnY, btnSize, btnSize);
+                if (canMoveDown) {
+                    int downBg = downHover ? ThemeManager.getAccentDim(0.35f) : 0x14FFFFFF;
+                    int downBorder = downHover ? accent : 0x22FFFFFF;
+                    AaRoundRect.draw(guiGraphics, downX, btnY, btnSize, btnSize, 4, downBg, downBorder);
+                    guiGraphics.drawCenteredString(this.font, "▼", downX + (btnSize / 2), btnY + 3, downHover ? accent : ThemeManager.getTextSecondary());
+                }
+
+                // Remove Button (x)
+                int remX = downX + btnSize + 4;
+                boolean remHover = isMouseOver(mouseX, mouseY, remX, btnY, btnSize, btnSize);
+                int remBg = remHover ? 0x44FF3333 : 0x14FFFFFF;
+                int remBorder = remHover ? 0xFFFF4444 : 0x22FFFFFF;
+                AaRoundRect.draw(guiGraphics, remX, btnY, btnSize, btnSize, 4, remBg, remBorder);
+                guiGraphics.drawCenteredString(this.font, "x", remX + (btnSize / 2), btnY + 3, remHover ? 0xFFFF5555 : ThemeManager.getTextMuted());
+
+                // Track Line: Title in bold white, artist in secondary
+                int textX = contentX + 28;
+                int textMaxW = actionX - textX - 6;
+                String trackStr = item.getName() + " — " + item.getArtists();
+                String line = trimWithEllipsis(trackStr, textMaxW);
+                guiGraphics.drawString(this.font, line, textX, rowY + 10, rowHover ? 0xFFFFFFFF : ThemeManager.getTextPrimary(), false);
+            }
+
+            curY += rowH + 4;
+        }
+
+        guiGraphics.disableScissor();
+
+        int totalH = (cp != null ? 40 : 0) + (totalItems * (rowH + 4)) + 12;
+        int maxScroll = Math.max(0, totalH - listH);
+        if (queueScrollY > maxScroll) queueScrollY = maxScroll;
+
+        renderScrollbar(guiGraphics, contentX + contentW - 6, listTopY, listH, totalH, queueScrollY);
+    }
+
+    // =========================================================================
+    // TAB 4: THEMES
+    // =========================================================================
+
+    // =========================================================================
+    // TAB: HUD EDITOR
+    // =========================================================================
+
+    private void renderHudEditorTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int contentX = modalX + sidebarWidth + 14;
+        int curY = modalY + 44;
+        int cardW = modalWidth - sidebarWidth - 28;
+
+        int mainCardH = 248;
+        renderGroupCardBackground(guiGraphics, contentX, curY, cardW, mainCardH);
+
+        int accent = ThemeManager.getAccent();
+        guiGraphics.drawString(this.font, "Interactive In-Game HUD Canvas", contentX + 14, curY + 12, accent, true);
+        guiGraphics.drawString(this.font, "Reposition and scale the Spotify HUD overlay anywhere on your screen.", contentX + 14, curY + 24, ThemeManager.getTextSecondary(), false);
+
+        renderHairline(guiGraphics, contentX + 12, curY + 38, cardW - 24);
+
+        int badgeY = curY + 46;
+        int badgeW = 92;
+        int badgeH = 18;
+        int gap = 5;
+
+        renderInfoPill(guiGraphics, "Drag & Drop", contentX + 14, badgeY, badgeW, badgeH);
+        renderInfoPill(guiGraphics, "Corner Scale", contentX + 14 + badgeW + gap, badgeY, badgeW, badgeH);
+        renderInfoPill(guiGraphics, "Magnetic Snapping", contentX + 14 + (badgeW + gap) * 2, badgeY, badgeW + 20, badgeH);
+
+        int statusBoxY = curY + 72;
+        int statusBoxH = 68;
+        AaRoundRect.draw(guiGraphics, contentX + 14, statusBoxY, cardW - 28, statusBoxH, 6, 0x1AFFFFFF, 0x24FFFFFF);
+
+        String posStr = config.getHudPosition().getDisplayName();
+        String coordStr = (config.getHudCustomX() >= 0 && config.getHudCustomY() >= 0)
+                ? (config.getHudCustomX() + ", " + config.getHudCustomY() + " px")
+                : "Automatic Anchor";
+        String scaleStr = config.getHudScalePercent() + "%";
+
+        guiGraphics.drawString(this.font, "Placement:", contentX + 22, statusBoxY + 10, ThemeManager.getTextSecondary());
+        guiGraphics.drawString(this.font, posStr, contentX + 115, statusBoxY + 10, accent, true);
+
+        guiGraphics.drawString(this.font, "Coordinates (X, Y):", contentX + 22, statusBoxY + 28, ThemeManager.getTextSecondary());
+        guiGraphics.drawString(this.font, coordStr, contentX + 115, statusBoxY + 28, 0xFFFFFFFF, false);
+
+        guiGraphics.drawString(this.font, "Scale:", contentX + 22, statusBoxY + 46, ThemeManager.getTextSecondary());
+        guiGraphics.drawString(this.font, scaleStr, contentX + 115, statusBoxY + 46, ThemeManager.getAccent2(), true);
+
+        int btnW = 180;
+        int btnH = 28;
+        int btnX = contentX + (cardW - btnW) / 2;
+        int btnY = curY + 152;
+        boolean btnHover = isMouseOver(mouseX, mouseY, btnX, btnY, btnW, btnH);
+
+        int btnBg = btnHover ? accent : ThemeManager.getAccentDim(0.85f);
+        int btnBorder = ThemeManager.getAccent();
+        AaRoundRect.draw(guiGraphics, btnX, btnY, btnW, btnH, 6, btnBg, btnBorder);
+        guiGraphics.fill(btnX + 4, btnY + 1, btnX + btnW - 4, btnY + 2, 0x55FFFFFF);
+
+        int textCol = btnHover ? 0xFF0D0D14 : 0xFF14141E;
+        guiGraphics.drawCenteredString(this.font, "Launch HUD Editor", btnX + (btnW / 2), btnY + 10, textCol);
+
+        String tip = "Click 'Save' at the top center of the editor to apply coordinates.";
+        guiGraphics.drawCenteredString(this.font, tip, contentX + (cardW / 2), curY + 194, ThemeManager.getTextMuted());
+    }
+
+    private void renderInfoPill(GuiGraphics g, String text, int x, int y, int w, int h) {
+        AaRoundRect.draw(g, x, y, w, h, 4, 0x220D0D14, 0x24FFFFFF);
+        g.drawCenteredString(this.font, text, x + (w / 2), y + 5, 0xFFCCCCCC);
+    }
+
+    private void renderThemesTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int contentH = modalHeight - 54;
+        int accent = ThemeManager.getAccent();
+        int cardW = contentW - 14; // leaves clean 8px gutter before scrollbar
+
+        int maxScroll = Math.max(0, THEMES_CONTENT_HEIGHT - contentH);
+        if (this.themesScrollY > maxScroll) {
+            this.themesScrollY = maxScroll;
+        }
+
+        guiGraphics.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
+
+        int curY = contentY + 4 - themesScrollY;
+
+        guiGraphics.drawString(this.font, "LIQUID GLASS THEMES", contentX + 2, curY, accent, true);
+        curY += 16;
+
+        ThemeLook currentLook = config.getThemeLook();
+        ThemeLook[] looks = ThemeLook.values();
+        int cardH = 34;
+
+        for (ThemeLook look : looks) {
+            boolean isActive = (look == currentLook);
+            boolean hover = isMouseOver(mouseX, mouseY, contentX, curY, cardW, cardH);
+
+            int bg = hover ? ThemeManager.getCardHoverBg() : ThemeManager.getCardBg();
+            int border = isActive ? look.getAccentColor() : (hover ? ThemeManager.applyAlpha(look.getAccentColor(), 0.55f) : ThemeManager.getGlassEdge());
+
+            AaRoundRect.draw(guiGraphics, contentX, curY, cardW, cardH, 7, bg, border);
+
+            // Palette color swatch (perfectly centered 12x12 inner swatch in 22x22 outer box)
+            AaRoundRect.draw(guiGraphics, contentX + 8, curY + 6, 22, 22, 5, 0xFF000000 | look.getWindowRgb(), 0x33FFFFFF);
+            AaRoundRect.draw(guiGraphics, contentX + 13, curY + 11, 12, 12, 3, look.getAccentColor(), 0x30000000);
+
+            // Title & Subtitle
+            guiGraphics.drawString(this.font, look.getTitle(), contentX + 38, curY + 6, isActive ? look.getAccentColor() : ThemeManager.getTextPrimary(), isActive);
+            guiGraphics.drawString(this.font, look.getSubtitle(), contentX + 38, curY + 18, ThemeManager.getTextMuted(), false);
+
+            if (isActive) {
+                guiGraphics.drawString(this.font, "Active", contentX + cardW - 55, curY + 12, look.getAccentColor(), true);
+            }
+
+            curY += cardH + 5;
+        }
+
+        curY += 8;
+
+        // Glass Opacity Slider Card
+        AaRoundRect.draw(guiGraphics, contentX, curY, cardW, 40, 8, ThemeManager.getCardBg(), ThemeManager.getGlassEdge());
+        guiGraphics.drawString(this.font, "Liquid Glass Translucency", contentX + 12, curY + 8, 0xFFFFFFFF, false);
+        guiGraphics.drawString(this.font, "Window background opacity", contentX + 12, curY + 22, ThemeManager.getTextMuted(), false);
+
+        int sliderW = 85;
+        int badgeW = 38;
+        int badgeX = contentX + cardW - 12 - badgeW;
+        int sliderX = badgeX - 8 - sliderW;
+        int opacPercent = Math.round(40 + dragGlassOpacityRatio * 60);
+        boolean opacHover = isMouseOver(mouseX, mouseY, sliderX, curY + 12, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, curY + 18, sliderW, dragGlassOpacityRatio, opacHover);
+        renderBadge(guiGraphics, badgeX, curY + 11, badgeW, 18, opacPercent + "%", opacHover);
+
+        curY += 48;
+
+        // Accent Palette Overrides
+        guiGraphics.drawString(this.font, "ACCENT PALETTE OVERRIDE", contentX + 2, curY, accent, true);
+        curY += 16;
+
+        ThemeAccent currentAccent = config.getThemeAccent();
+        ThemeAccent[] accents = ThemeAccent.values();
+        int gridCols = 3;
+        int cellW = (cardW - ((gridCols - 1) * 6)) / gridCols;
+        int cellH = 24;
+
+        for (int i = 0; i < accents.length; i++) {
+            ThemeAccent acc = accents[i];
+            int col = i % gridCols;
+            int row = i / gridCols;
+            int cellX = contentX + (col * (cellW + 6));
+            int cellY = curY + (row * (cellH + 5));
+
+            boolean isActive = (acc == currentAccent);
+            boolean hover = isMouseOver(mouseX, mouseY, cellX, cellY, cellW, cellH);
+
+            int cellBg = isActive ? ThemeManager.getAccentDim(0.24f) : (hover ? ThemeManager.getCardHoverBg() : ThemeManager.getCardBg());
+            int cellBorder = isActive ? (acc.getColor() != 0 ? acc.getColor() : accent) : (hover ? 0x44FFFFFF : ThemeManager.getGlassEdge());
+
+            AaRoundRect.draw(guiGraphics, cellX, cellY, cellW, cellH, 6, cellBg, cellBorder);
+
+            if (acc.getColor() != 0) {
+                AaRoundRect.draw(guiGraphics, cellX + 6, cellY + 6, 12, 12, 3, acc.getColor(), 0);
+            } else {
+                AaRoundRect.draw(guiGraphics, cellX + 6, cellY + 6, 12, 12, 3, currentLook.getAccentColor(), 0);
+            }
+
+            guiGraphics.drawString(this.font, acc.getTitle(), cellX + 22, cellY + 7, isActive ? 0xFFFFFFFF : ThemeManager.getTextSecondary(), false);
+        }
+
+        guiGraphics.disableScissor();
+
+        // Scrollbar with dedicated 8px gutter
+        renderScrollbar(guiGraphics, contentX + contentW - 6, contentY + 4, contentH - 8, THEMES_CONTENT_HEIGHT, themesScrollY);
+    }
+
+    // =========================================================================
+    // TAB 5: SETTINGS
+    // =========================================================================
+
+    private void renderSettingsTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int contentH = modalHeight - 54;
+        int accent = ThemeManager.getAccent();
+
+        int maxScroll = Math.max(0, SETTINGS_CONTENT_HEIGHT - contentH);
+        if (this.settingsScrollY > maxScroll) {
+            this.settingsScrollY = maxScroll;
+        }
+
+        guiGraphics.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
+
+        int curY = contentY + 4 - settingsScrollY;
+        int cardW = contentW - 14;
+        int rowH = 38;
+
+        // Layout horizontal offsets inside cards (balanced spacing & zero clipping)
+        int sliderW = 76;
+        int badgeW = 36;
+        int badgeX = contentX + cardW - 12 - badgeW;
+        int sliderX = badgeX - 6 - sliderW;
+        int switchX = badgeX + (badgeW - 32); // right-aligned with the badge column
+        int buttonW = 105;
+        int buttonX = contentX + cardW - 12 - buttonW;
+
+        // ---------------------------------------------------------------------
+        // GROUP 1: CELESTIAL SKY LYRICS (The exact section in user's Screen 1!)
+        // ---------------------------------------------------------------------
+        renderGroupHeader(guiGraphics, "CELESTIAL SKY LYRICS", contentX + 2, curY);
+        curY += 15;
+
+        int skyGroupRows = 5;
+        int skyCardH = skyGroupRows * rowH;
+        renderGroupCardBackground(guiGraphics, contentX, curY, cardW, skyCardH);
+
+        // Row 1: Sky Lyrics Enable
+        int r1Y = curY;
+        renderRowHover(guiGraphics, contentX, r1Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r1Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Sky Lyrics Overlay", "Display synced lyrics across the sky dome", contentX + 14, r1Y, switchX);
+        boolean skyHover = isMouseOver(mouseX, mouseY, switchX, r1Y + 11, 32, 16);
+        renderSwitch(guiGraphics, config.isSkyLyricsEnabled(), switchX, r1Y + 11, skyHover);
+        renderHairline(guiGraphics, contentX + 12, r1Y + rowH, cardW - 24);
+
+        // Row 2: Sky Lyrics Direction (Fixed removed completely!)
+        int r2Y = curY + rowH;
+        renderRowHover(guiGraphics, contentX, r2Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r2Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Sky Lyrics Direction", "Direction: " + config.getSkyLyricsMode().getDisplayName(), contentX + 14, r2Y, buttonX);
+        boolean skyDirHover = isMouseOver(mouseX, mouseY, buttonX, r2Y + 9, buttonW, 20);
+        renderButton(guiGraphics, config.getSkyLyricsMode().getDisplayName() + " ▾", buttonX, r2Y + 9, buttonW, 20, skyDirHover);
+        renderHairline(guiGraphics, contentX + 12, r2Y + rowH, cardW - 24);
+
+        // Row 3: Sky Lyrics Scale (Slider + Badge)
+        int r3Y = curY + (rowH * 2);
+        renderRowHover(guiGraphics, contentX, r3Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r3Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Sky Lyrics Scale", "Text size in sky dome", contentX + 14, r3Y, sliderX);
+        int skyScalePercent = isDraggingSkyScale ? Math.round(50 + dragSkyScaleRatio * 150) : config.getSkyLyricsScalePercent();
+        float skyScaleRatio = (skyScalePercent - 50) / 150.0f;
+        boolean skyScaleHover = isMouseOver(mouseX, mouseY, sliderX, r3Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, r3Y + 17, sliderW, skyScaleRatio, skyScaleHover);
+        renderBadge(guiGraphics, badgeX, r3Y + 10, badgeW, 18, skyScalePercent + "%", skyScaleHover);
+        renderHairline(guiGraphics, contentX + 12, r3Y + rowH, cardW - 24);
+
+        // Row 4: Sky Visible Lines (Slider + Badge)
+        int r4Y = curY + (rowH * 3);
+        renderRowHover(guiGraphics, contentX, r4Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r4Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Sky Visible Lines", "Visible lyric line count", contentX + 14, r4Y, sliderX);
+        int skyLines = isDraggingSkyLines ? Math.round(3 + dragSkyLinesRatio * 22) : config.getSkyLyricsLength();
+        float skyLinesRatio = (skyLines - 3) / 22.0f;
+        boolean skyLinesHover = isMouseOver(mouseX, mouseY, sliderX, r4Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, r4Y + 17, sliderW, skyLinesRatio, skyLinesHover);
+        renderBadge(guiGraphics, badgeX, r4Y + 10, badgeW, 18, skyLines + "x", skyLinesHover);
+        renderHairline(guiGraphics, contentX + 12, r4Y + rowH, cardW - 24);
+
+        // Row 5: Lyrics Typography
+        int r5Y = curY + (rowH * 4);
+        renderRowHover(guiGraphics, contentX, r5Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r5Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Lyrics Typography", "Font for lyrics & UI", contentX + 14, r5Y, buttonX);
+        boolean fontHover = isMouseOver(mouseX, mouseY, buttonX, r5Y + 9, buttonW, 20);
+        renderButton(guiGraphics, config.getLyricFont().getDisplayName() + " ▾", buttonX, r5Y + 9, buttonW, 20, fontHover);
+
+        curY += skyCardH + 16;
+
+        // ---------------------------------------------------------------------
+        // GROUP 2: IN-GAME HUD OVERLAY
+        // ---------------------------------------------------------------------
+        renderGroupHeader(guiGraphics, "IN-GAME HUD OVERLAY", contentX + 2, curY);
+        curY += 15;
+
+        int hudGroupRows = 4;
+        int hudCardH = hudGroupRows * rowH;
+        renderGroupCardBackground(guiGraphics, contentX, curY, cardW, hudCardH);
+
+        // Row 1: HUD Enabled
+        int h1Y = curY;
+        renderRowHover(guiGraphics, contentX, h1Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h1Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "HUD Overlay Card", "Position: " + config.getHudPosition().getDisplayName(), contentX + 14, h1Y, switchX);
+        boolean hudHover = isMouseOver(mouseX, mouseY, switchX, h1Y + 11, 32, 16);
+        renderSwitch(guiGraphics, config.getHudPosition() != ModConfig.HudPosition.OFF, switchX, h1Y + 11, hudHover);
+        renderHairline(guiGraphics, contentX + 12, h1Y + rowH, cardW - 24);
+
+        // Row 2: HUD Lyrics Line
+        int h2Y = curY + rowH;
+        renderRowHover(guiGraphics, contentX, h2Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h2Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "HUD Lyrics Line", "Display active lyric line under HUD card", contentX + 14, h2Y, switchX);
+        boolean hudLyricsHover = isMouseOver(mouseX, mouseY, switchX, h2Y + 11, 32, 16);
+        renderSwitch(guiGraphics, config.isHudShowLyrics(), switchX, h2Y + 11, hudLyricsHover);
+        renderHairline(guiGraphics, contentX + 12, h2Y + rowH, cardW - 24);
+
+        // Row 3: HUD Opacity (Slider + Badge)
+        int h3Y = curY + (rowH * 2);
+        renderRowHover(guiGraphics, contentX, h3Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h3Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "HUD Opacity", "Translucency of overlay", contentX + 14, h3Y, sliderX);
+        int opacPercent = isDraggingHudOpacity ? Math.round(dragHudOpacityRatio * 100) : config.getHudOpacityPercent();
+        float opacRatio = opacPercent / 100.0f;
+        boolean opacHover = isMouseOver(mouseX, mouseY, sliderX, h3Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, h3Y + 17, sliderW, opacRatio, opacHover);
+        renderBadge(guiGraphics, badgeX, h3Y + 10, badgeW, 18, (opacPercent == 0) ? "Off" : (opacPercent + "%"), opacHover);
+        renderHairline(guiGraphics, contentX + 12, h3Y + rowH, cardW - 24);
+
+        // Row 4: HUD Scale (Slider + Badge)
+        int h4Y = curY + (rowH * 3);
+        renderRowHover(guiGraphics, contentX, h4Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h4Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "HUD Scale", "Size of the in-game overlay", contentX + 14, h4Y, sliderX);
+        int scalePercent = isDraggingHudScale ? Math.round(50 + dragHudScaleRatio * 100) : config.getHudScalePercent();
+        float scaleRatio = (scalePercent - 50) / 100.0f;
+        boolean scaleHover = isMouseOver(mouseX, mouseY, sliderX, h4Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, h4Y + 17, sliderW, scaleRatio, scaleHover);
+        renderBadge(guiGraphics, badgeX, h4Y + 10, badgeW, 18, scalePercent + "%", scaleHover);
+
+        curY += hudCardH + 16;
+
+        // ---------------------------------------------------------------------
+        // GROUP 3: AUDIO DUCKING & SYSTEM
+        // ---------------------------------------------------------------------
+        renderGroupHeader(guiGraphics, "AUDIO DUCKING & UTILITIES", contentX + 2, curY);
+        curY += 15;
+
+        int audioGroupRows = 4;
+        int audioCardH = audioGroupRows * rowH;
+        renderGroupCardBackground(guiGraphics, contentX, curY, cardW, audioCardH);
+
+        // Row 1: Audio Ducking Enable
+        int a1Y = curY;
+        renderRowHover(guiGraphics, contentX, a1Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, a1Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Minecraft Audio Ducking", "Lower game volume during music", contentX + 14, a1Y, switchX);
+        boolean duckHover = isMouseOver(mouseX, mouseY, switchX, a1Y + 11, 32, 16);
+        renderSwitch(guiGraphics, config.isAudioDuckingEnabled(), switchX, a1Y + 11, duckHover);
+        renderHairline(guiGraphics, contentX + 12, a1Y + rowH, cardW - 24);
+
+        // Row 2: Ducking Multiplier (Slider + Badge)
+        int a2Y = curY + rowH;
+        renderRowHover(guiGraphics, contentX, a2Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, a2Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Ducking Multiplier", "Game volume level while playing", contentX + 14, a2Y, sliderX);
+        int duckPercent = isDraggingDucking ? Math.round(5 + dragDuckingRatio * 95) : Math.round(config.getDuckingMultiplier() * 100);
+        float duckRatio = (duckPercent - 5) / 95.0f;
+        boolean duckHoverSlider = isMouseOver(mouseX, mouseY, sliderX, a2Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, a2Y + 17, sliderW, duckRatio, duckHoverSlider);
+        renderBadge(guiGraphics, badgeX, a2Y + 10, badgeW, 18, duckPercent + "%", duckHoverSlider);
+        renderHairline(guiGraphics, contentX + 12, a2Y + rowH, cardW - 24);
+
+        // Row 3: Diagnostics
+        int a3Y = curY + (rowH * 2);
+        renderRowHover(guiGraphics, contentX, a3Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, a3Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Anonymous Diagnostics", "Crash & stability metrics", contentX + 14, a3Y, switchX);
+        boolean diagHover = isMouseOver(mouseX, mouseY, switchX, a3Y + 11, 32, 16);
+        renderSwitch(guiGraphics, config.isMetricsEnabled(), switchX, a3Y + 11, diagHover);
+        renderHairline(guiGraphics, contentX + 12, a3Y + rowH, cardW - 24);
+
+        // Row 4: Utility Action Buttons
+        int a4Y = curY + (rowH * 3);
+        renderRowHover(guiGraphics, contentX, a4Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, a4Y, cardW, rowH));
+        int btnW = (cardW - 32) / 2;
+        boolean reloadHover = isMouseOver(mouseX, mouseY, contentX + 12, a4Y + 8, btnW, 22);
+        renderButton(guiGraphics, "↺ Reload Bridge", contentX + 12, a4Y + 8, btnW, 22, reloadHover);
+
+        it.itzcrih.espoty.update.UpdateChecker updateChecker = it.itzcrih.espoty.update.UpdateChecker.getInstance();
+        boolean hasUpdate = updateChecker.isUpdateAvailable();
+        int btn2X = contentX + 12 + btnW + 8;
+        boolean updateHover = isMouseOver(mouseX, mouseY, btn2X, a4Y + 8, btnW, 22);
+        String updateLabel = hasUpdate ? "Update v" + updateChecker.getLatestVersion() + " Available!" : "Check for Updates";
+        renderButton(guiGraphics, updateLabel, btn2X, a4Y + 8, btnW, 22, updateHover);
+
+        curY += audioCardH + 20;
+
+        // Author credits
+        String credit = "§7eSpoty v" + it.itzcrih.espoty.update.UpdateChecker.getCurrentVersion() + " by §6itzCrih §8• §ehttps://itzcrih.it";
+        boolean creditHover = isMouseOver(mouseX, mouseY, contentX + 2, curY, 260, 12);
+        guiGraphics.drawString(this.font, credit, contentX + 2, curY, creditHover ? 0xFFFFFFFF : ThemeManager.getTextMuted(), false);
+
+        curY += 20;
+        guiGraphics.disableScissor();
+
+        // Scrollbar with dedicated 8px gutter
+        renderScrollbar(guiGraphics, contentX + contentW - 6, contentY + 4, contentH - 8, SETTINGS_CONTENT_HEIGHT, settingsScrollY);
+    }
+
+    // =========================================================================
+    // UI WIDGETS
+    // =========================================================================
+
+    private void renderGroupHeader(GuiGraphics g, String title, int x, int y) {
+        g.drawString(this.font, title, x, y, ThemeManager.getAccent(), true);
+    }
+
+    private void renderGroupCardBackground(GuiGraphics g, int x, int y, int w, int h) {
+        // Deep obsidian glass panel with 9px rounded corners and 1px delicate border
+        AaRoundRect.draw(g, x, y, w, h, 9, 0xD00E1422, 0x24FFFFFF);
+    }
+
+    private void renderRowHover(GuiGraphics g, int x, int y, int w, int h, boolean hover) {
+        if (hover) {
+            AaRoundRect.draw(g, x + 2, y + 1, w - 4, h - 2, 6, 0x0CFFFFFF, 0);
+        }
+    }
+
+    private void renderHairline(GuiGraphics g, int x, int y, int w) {
+        g.fill(x, y, x + w, y + 1, 0x0EFFFFFF);
+    }
+
+    private void renderSettingLabel(GuiGraphics g, String title, String subtitle, int x, int y, int controlX) {
+        int maxW = Math.max(120, controlX - x - 8);
+        String t = trimWithEllipsis(title, maxW);
+        String s = trimWithEllipsis(subtitle, maxW);
+        g.drawString(this.font, t, x, y + 6, 0xFFFFFFFF, false);
+        g.drawString(this.font, s, x, y + 20, ThemeManager.getTextMuted(), false);
+    }
+
+    private void renderSettingLabel(GuiGraphics g, String title, String subtitle, int x, int y) {
+        renderSettingLabel(g, title, subtitle, x, y, x + 180);
+    }
+
+    /**
+     * Slider: 4px thin pill track + white 10px circular knob.
+     */
+    private void renderSlider(GuiGraphics g, int x, int y, int w, float ratio, boolean hover) {
+        int accent = ThemeManager.getAccent();
+        int accent2 = ThemeManager.getAccent2();
+
+        // 4px background track
+        AaRoundRect.draw(g, x, y, w, 4, 2, 0x28FFFFFF, 0);
+
+        // 4px filled accent track
+        int fillW = (int) (w * Math.max(0f, Math.min(1f, ratio)));
+        if (fillW > 0) {
+            AaRoundRect.draw(g, x, y, Math.max(4, fillW), 4, 2, accent, 0);
+        }
+
+        // Pure white circular knob (10px diameter, radius 5px)
+        int knobX = x + fillW;
+        int knobY = y + 2;
+        AaRoundRect.draw(g, knobX - 5, knobY - 5, 10, 10, 5, 0xFFFFFFFF, hover ? accent2 : 0x40000000);
+    }
+
+    /**
+     * Numeric Badge Tag: rounded mini-pill with clear centered text.
+     */
+    private void renderBadge(GuiGraphics g, int x, int y, int w, int h, String text, boolean hover) {
+        int bg = hover ? ThemeManager.getAccentDim(0.30f) : 0x14FFFFFF;
+        int border = hover ? ThemeManager.getAccent() : 0x24FFFFFF;
+        AaRoundRect.draw(g, x, y, w, h, 4, bg, border);
+        g.drawCenteredString(this.font, text, x + (w / 2), y + 5, hover ? 0xFFFFFFFF : ThemeManager.getTextPrimary());
+    }
+
+    /**
+     * Toggle Switch: 32x16px full pill with 10px circular knob.
+     */
+    private void renderSwitch(GuiGraphics g, boolean enabled, int x, int y, boolean hover) {
+        int w = 32;
+        int h = 16;
+        int accent = ThemeManager.getAccent();
+
+        int bg = enabled ? (hover ? ThemeManager.getAccent2() : accent) : (hover ? 0x28FFFFFF : 0x1EFFFFFF);
+        int border = enabled ? accent : (hover ? 0x40FFFFFF : 0x28FFFFFF);
+
+        // 8px radius pill capsule
+        AaRoundRect.draw(g, x, y, w, h, 8, bg, border);
+
+        // 10px diameter circular knob
+        int knobSize = 10;
+        int knobX = enabled ? (x + w - knobSize - 3) : (x + 3);
+        int knobY = y + 3;
+        int knobCol = enabled ? 0xFFFFFFFF : 0xFFB0B0C0;
+
+        AaRoundRect.draw(g, knobX, knobY, knobSize, knobSize, 5, knobCol, 0);
+    }
+
+    /**
+     * Pill / Dropdown Button: 20px height, 5px radius.
+     */
+    private void renderButton(GuiGraphics g, String text, int x, int y, int w, int h, boolean hover) {
+        int bg = hover ? ThemeManager.getAccentDim(0.35f) : 0x14FFFFFF;
+        int border = hover ? ThemeManager.getAccent() : 0x28FFFFFF;
+        AaRoundRect.draw(g, x, y, w, h, 5, bg, border);
+        g.drawCenteredString(this.font, text, x + (w / 2), y + (h / 2) - 4, hover ? ThemeManager.getAccent() : 0xFFFFFFFF);
+    }
+
+    /**
+     * Scrollbar: thin 3px vertical pill with rounded tips.
+     */
+    private void renderScrollbar(GuiGraphics g, int x, int y, int h, int totalH, int scrollY) {
+        if (totalH <= h) return;
+
+        // Background track (3px)
+        AaRoundRect.draw(g, x, y, 3, h, 1, 0x14FFFFFF, 0);
+
+        int thumbH = Math.max(16, Math.min(h, (int) ((h / (float) totalH) * h)));
+        int maxScroll = Math.max(1, totalH - h);
+        float ratio = Math.max(0f, Math.min(1f, scrollY / (float) maxScroll));
+        int thumbY = y + (int) (ratio * (h - thumbH));
+
+        AaRoundRect.draw(g, x, thumbY, 3, thumbH, 1, 0x50FFFFFF, 0x20FFFFFF);
+    }
+
+    private void renderGlassCard(GuiGraphics g, int x, int y, int w, int h, boolean hover, boolean active) {
+        int bg = hover ? ThemeManager.getCardHoverBg() : ThemeManager.getCardBg();
+        int border = active ? ThemeManager.getAccent() : (hover ? ThemeManager.applyAlpha(ThemeManager.getAccent(), 0.55f) : ThemeManager.getGlassEdge());
+        AaRoundRect.draw(g, x, y, w, h, 7, bg, border);
+
+        if (active) {
+            AaRoundRect.draw(g, x + 1, y + 1, w - 2, h - 2, 6, ThemeManager.getAccentDim(0.20f), 0);
         }
     }
 
     private void renderPillButton(GuiGraphics g, String text, int x, int y, int w, int h, boolean hover) {
-        int bg = hover ? ThemeManager.getAccentDim(1.0f) : 0x18FFFFFF;
-        int border = hover ? ThemeManager.getAccent() : ThemeManager.getGlassEdge();
-
-        g.fill(x + 2, y, x + w - 2, y + h, bg);
-        g.fill(x, y + 2, x + 2, y + h - 2, bg);
-        g.fill(x + w - 2, y + 2, x + w, y + h - 2, bg);
-
-        g.fill(x + 2, y, x + w - 2, y + 1, border);
-        g.fill(x + 2, y + h - 1, x + w - 2, y + h, border);
-
-        g.drawCenteredString(this.font, text, x + (w / 2), y + (h / 2) - 4, hover ? ThemeManager.getAccent() : ThemeManager.getTextPrimary());
+        renderButton(g, text, x, y, w, h, hover);
     }
 
-    private void renderModernIconButton(GuiGraphics g, String icon, int x, int y, int w, int h, boolean hover, int color, boolean active, boolean enabled) {
+    private void renderModernIconButton(GuiGraphics g, String iconType, int x, int y, int w, int h, boolean hover, int color, boolean active, boolean enabled) {
         if (!enabled) {
-            g.drawCenteredString(this.font, icon, x + (w / 2), y + (h / 2) - 4, 0xFF444455);
-            return;
+            color = 0xFF444455;
         }
 
-        int bg = hover ? ThemeManager.getAccentDim(0.85f) : 0x15FFFFFF;
-        g.fill(x + 2, y, x + w - 2, y + h, bg);
-        g.fill(x, y + 2, x + 2, y + h - 2, bg);
-        g.fill(x + w - 2, y + 2, x + w, y + h - 2, bg);
+        int bg = active ? ThemeManager.getAccentDim(0.35f) : (hover ? 0x24FFFFFF : 0x0DFFFFFF);
+        int border = active ? ThemeManager.getAccent() : (hover ? ThemeManager.applyAlpha(ThemeManager.getAccent(), 0.60f) : 0x22FFFFFF);
 
-        g.drawCenteredString(this.font, icon, x + (w / 2), y + (h / 2) - 4, hover ? ThemeManager.getAccent() : color);
+        AaRoundRect.draw(g, x, y, w, h, Math.min(w, h) / 2, bg, border);
 
-        if (active) {
-            g.fill(x + (w / 2) - 2, y + h - 2, x + (w / 2) + 2, y + h, ThemeManager.getAccent());
+        int cx = x + (w / 2);
+        int cy = y + (h / 2);
+        int iconColor = hover ? 0xFFFFFFFF : color;
+
+        renderControlIcon(g, iconType, cx, cy, iconColor);
+    }
+
+    /**
+     * Precision Vector Glyphs for Media Controls: perfectly sharp at all GUI scales.
+     */
+    private void renderControlIcon(GuiGraphics g, String type, int cx, int cy, int color) {
+        switch (type) {
+            case "PLAY" -> {
+                // Right-pointing filled play triangle (width 7, height 11)
+                for (int i = 0; i <= 6; i++) {
+                    int h = 5 - (i * 5 / 7);
+                    g.fill(cx - 2 + i, cy - h, cx - 1 + i, cy + h + 1, color);
+                }
+            }
+            case "PAUSE" -> {
+                // Two vertical pause bars (width 3, height 10, gap 2)
+                g.fill(cx - 4, cy - 5, cx - 1, cy + 5, color);
+                g.fill(cx + 1, cy - 5, cx + 4, cy + 5, color);
+            }
+            case "PREV" -> {
+                // Previous: vertical stop bar + left triangle
+                g.fill(cx - 5, cy - 4, cx - 3, cy + 5, color);
+                for (int i = 0; i <= 5; i++) {
+                    int h = i * 4 / 5;
+                    g.fill(cx - 1 + i, cy - h, cx + i, cy + h + 1, color);
+                }
+            }
+            case "NEXT" -> {
+                // Next: right triangle + vertical stop bar
+                for (int i = 0; i <= 5; i++) {
+                    int h = 4 - (i * 4 / 5);
+                    g.fill(cx - 4 + i, cy - h, cx - 3 + i, cy + h + 1, color);
+                }
+                g.fill(cx + 3, cy - 4, cx + 5, cy + 5, color);
+            }
+            case "SHUF" -> {
+                g.drawCenteredString(this.font, "[SHUF]", cx, cy - 4, color);
+            }
+            case "REP" -> {
+                g.drawCenteredString(this.font, "[REP]", cx, cy - 4, color);
+            }
+            case "REP1" -> {
+                g.drawCenteredString(this.font, "[REP1]", cx, cy - 4, color);
+            }
+            default -> {
+                g.drawCenteredString(this.font, type, cx, cy - 4, color);
+            }
         }
     }
 
     private void renderStatusBanner(GuiGraphics guiGraphics) {
         int bannerW = this.font.width(statusMessage) + 24;
         int bannerH = 18;
-        int bx = modalX + (modalWidth - bannerW) / 2;
-        int by = modalY + modalHeight - 24;
+        int bx = modalX + sidebarWidth + ((modalWidth - sidebarWidth - bannerW) / 2);
+        int by = modalY + modalHeight - 28;
 
-        int bg = ThemeManager.getPanelBg();
-        guiGraphics.fill(bx + 2, by, bx + bannerW - 2, by + bannerH, bg);
-        guiGraphics.fill(bx, by + 2, bx + 2, by + bannerH - 2, bg);
-        guiGraphics.fill(bx + bannerW - 2, by + 2, bx + bannerW, by + bannerH - 2, bg);
-
-        guiGraphics.fill(bx + 2, by, bx + bannerW - 2, by + 1, ThemeManager.getAccent());
-        guiGraphics.drawCenteredString(this.font, statusMessage, bx + (bannerW / 2), by + 5, 0xFFFFFFFF);
+        int bannerBg = 0xEE000000 | ThemeManager.getLook().getWindowRgb();
+        AaRoundRect.draw(guiGraphics, bx, by, bannerW, bannerH, 9, bannerBg, ThemeManager.getAccent());
+        guiGraphics.drawCenteredString(this.font, statusMessage, bx + (bannerW / 2), by + 5, ThemeManager.getAccent());
     }
 
-    private void setStatus(String msg) {
+    public void setStatus(String msg) {
         this.statusMessage = msg;
         this.statusMessageTime = System.currentTimeMillis();
     }
 
+    private void playClickSound() {
+        Minecraft.getInstance().getSoundManager().play(
+                SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f)
+        );
+    }
+
+    private String trimWithEllipsis(String text, int maxWidth) {
+        if (text == null) return "";
+        if (this.font.width(text) <= maxWidth) return text;
+        String ell = "…";
+        int ellW = this.font.width(ell);
+        StringBuilder sb = new StringBuilder();
+        for (char c : text.toCharArray()) {
+            if (this.font.width(sb.toString() + c) + ellW > maxWidth) {
+                return sb.toString() + ell;
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
     // =========================================================================
-    // INTERACTION HANDLING (CLICKS, DRAGS, SCROLLS, KEYS)
+    // MOUSE & KEY EVENT HANDLING
     // =========================================================================
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        int mx = (int) event.x();
+        int my = (int) event.y();
+
         if (event.button() != 0) {
             return super.mouseClicked(event, doubleClick);
         }
 
-        int mx = (int) event.x();
-        int my = (int) event.y();
-
-        // 1. Close Button (✕)
-        int closeX = modalX + modalWidth - 18;
-        int closeY = modalY + 9;
-        if (isMouseOver(mx, my, closeX - 4, closeY, 16, 14)) {
-            this.startCloseAnimation();
+        // Close button click
+        int closeSize = 16;
+        int closeX = modalX + modalWidth - closeSize - 12;
+        int closeY = modalY + 12;
+        if (isMouseOver(mx, my, closeX - 4, closeY - 4, closeSize + 8, closeSize + 8)) {
+            triggerCloseAnimation();
+            playClickSound();
             return true;
         }
 
-        // 2. Navigation Tabs
-        int tabY = modalY + 25;
-        int tabX = modalX + 16;
-        for (Tab tab : Tab.values()) {
-            int tabW = this.font.width(tab.getTitle()) + 12;
-            int tabH = 18;
-            if (isMouseOver(mx, my, tabX, tabY, tabW, tabH)) {
-                if (this.currentTab != tab) {
-                    this.currentTab = tab;
-                    this.tabChangeTime = System.currentTimeMillis();
-                    if (tab == Tab.QUEUE) {
-                        stateManager.refreshQueue(null);
+        // Sidebar Tab selection
+        if (mx >= modalX && mx <= modalX + sidebarWidth) {
+            int startY = modalY + 54;
+            int tabH = 30;
+            int tabGap = 3;
+            Tab[] tabs = Tab.values();
+            for (int i = 0; i < tabs.length; i++) {
+                int itemY = startY + (i * (tabH + tabGap));
+                if (isMouseOver(mx, my, modalX + 8, itemY, sidebarWidth - 16, tabH)) {
+                    if (tabs[i] == Tab.HUD_EDITOR) {
+                        playClickSound();
+                        if (this.minecraft != null) {
+                            this.minecraft.setScreen(new HudEditorScreen(this));
+                        }
+                        return true;
                     }
+                    if (this.activeTab != tabs[i]) {
+                        this.activeTab = tabs[i];
+                        this.tabSwitchStartTime = System.currentTimeMillis();
+                        if (this.activeTab == Tab.QUEUE) {
+                            this.stateManager.requestQueueRefresh();
+                        }
+                        playClickSound();
+                    }
+                    return true;
                 }
-                return true;
             }
-            tabX += tabW + 3;
+            return true;
         }
 
-        // 3. Category Interactions
-        switch (currentTab) {
+        // Content Area Click Router
+        switch (activeTab) {
             case PLAYER -> handlePlayerClick(mx, my);
+            case LYRICS -> handleLyricsClick(mx, my);
             case QUEUE -> handleQueueClick(mx, my);
+            case HUD_EDITOR -> handleHudEditorClick(mx, my);
             case THEMES -> handleThemesClick(mx, my);
             case SETTINGS -> handleSettingsClick(mx, my);
-            default -> {}
         }
 
         return super.mouseClicked(event, doubleClick);
     }
 
     private void handlePlayerClick(int mx, int my) {
-        PlaybackState state = stateManager.getCurrentState();
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
 
-        if (state == null) {
-            int cx = modalX + (modalWidth / 2);
-            if (isMouseOver(mx, my, cx - 75, modalY + 144, 150, 24)) {
+        PlaybackState state = stateManager.getCurrentState();
+        if (state == null || !state.isPlaying() && (state.getTrackName() == null || state.getTrackName().isEmpty())) {
+            int cx = contentX + (contentW / 2);
+            int btnW = 120;
+            int btnH = 22;
+            if (isMouseOver(mx, my, cx - (btnW / 2), contentY + 92, btnW, btnH)) {
                 SpotifyProcessDetector.launchSpotify();
-                setStatus("Launching Spotify...");
+                setStatus("Launching Spotify Desktop...");
+                playClickSound();
             }
             return;
         }
 
-        // Like Song Button
-        int heartX = modalX + modalWidth - 28;
-        int heartY = contentY + 3;
-        if (isMouseOver(mx, my, heartX - 3, heartY - 3, 16, 16)) {
-            boolean liked = stateManager.toggleCurrentTrackLiked();
-            setStatus(liked ? "Added to Liked Songs ❤" : "Removed from Liked Songs ♡");
+        // Like Heart Click
+        int heartX = contentX + contentW - 18;
+        int heartY = contentY + 8;
+        if (isMouseOver(mx, my, heartX - 4, heartY - 4, 18, 18)) {
+            stateManager.toggleCurrentTrackLiked();
+            setStatus(stateManager.isCurrentTrackLiked() ? "Saved to Liked Songs" : "Removed from Liked Songs");
+            playClickSound();
             return;
         }
 
-        // Seek Bar Scrubbing
-        int seekY = contentY + 86;
-        int seekW = modalWidth - 32;
-        if (state.canSeek() && isMouseOver(mx, my, contentX - 2, seekY - 4, seekW + 4, 12)) {
-            this.isDraggingSeek = true;
-            this.dragSeekRatio = Math.max(0f, Math.min(1f, (float) (mx - contentX) / seekW));
+        // Seek Bar Click
+        int seekY = contentY + 82;
+        int seekW = contentW - 8;
+        int seekX = contentX + 4;
+        if (isMouseOver(mx, my, seekX - 2, seekY - 4, seekW + 4, 12)) {
+            if (state.canSeek() && state.getDurationMs() > 0) {
+                this.isDraggingSeek = true;
+                this.dragSeekRatio = Math.max(0f, Math.min(1f, (float) (mx - seekX) / seekW));
+                long targetMs = (long) (state.getDurationMs() * dragSeekRatio);
+                stateManager.seek(targetMs);
+                setStatus("Seek to: " + PlaybackState.formatTime(targetMs));
+            }
             return;
         }
 
-        // Controls
-        int controlsY = seekY + 25;
-        int centerX = modalX + (modalWidth / 2);
+        // Media Controls
+        int controlsY = seekY + 22;
+        int centerX = contentX + (contentW / 2);
+        int centerY = controlsY + 14;
         int btnSize = 22;
+        int btnCenterY = centerY - (btnSize / 2);
 
-        // Shuffle (🔀)
-        if (state.canShuffle() && isMouseOver(mx, my, centerX - 90, controlsY, btnSize, btnSize)) {
+        int playSize = 30;
+        int playX = centerX - (playSize / 2);
+        int playY = centerY - (playSize / 2);
+
+        int prevX = playX - 10 - btnSize;
+        int nextX = playX + playSize + 10;
+
+        int shufX = prevX - 10 - btnSize;
+        int repX = nextX + btnSize + 10;
+
+        // Shuffle
+        if (isMouseOver(mx, my, shufX, btnCenterY, btnSize, btnSize) && state.canShuffle()) {
             stateManager.toggleShuffle();
-            setStatus("Toggled Shuffle");
+            playClickSound();
             return;
         }
 
-        // Prev (⏮)
-        if (state.canPrev() && isMouseOver(mx, my, centerX - 50, controlsY, btnSize, btnSize)) {
+        // Prev
+        if (isMouseOver(mx, my, prevX, btnCenterY, btnSize, btnSize) && state.canPrev()) {
             stateManager.previous();
-            setStatus("Previous Track");
+            playClickSound();
             return;
         }
 
-        // Play/Pause (▶ / ❚❚)
-        if (state.canPlayPause() && isMouseOver(mx, my, centerX - 18, controlsY - 2, 36, 26)) {
+        // Play/Pause
+        if (isMouseOver(mx, my, playX, playY, playSize, playSize) && state.canPlayPause()) {
             stateManager.togglePlayPause();
-            setStatus(state.isPlaying() ? "Paused" : "Playing");
+            playClickSound();
             return;
         }
 
-        // Next (⏭)
-        if (state.canNext() && isMouseOver(mx, my, centerX + 28, controlsY, btnSize, btnSize)) {
+        // Next
+        if (isMouseOver(mx, my, nextX, btnCenterY, btnSize, btnSize) && state.canNext()) {
             stateManager.next();
-            setStatus("Next Track");
+            playClickSound();
             return;
         }
 
-        // Repeat (🔁)
-        if (state.canRepeat() && isMouseOver(mx, my, centerX + 68, controlsY, btnSize, btnSize)) {
+        // Repeat
+        if (isMouseOver(mx, my, repX, btnCenterY, btnSize, btnSize) && state.canRepeat()) {
             stateManager.cycleRepeat();
-            setStatus("Cycled Repeat Mode");
+            playClickSound();
             return;
         }
 
-        // Volume Controls
-        int volY = controlsY + 32;
-        int volBarW = 110;
-        int volStartX = centerX - 80;
-        int volBarX = volStartX + 18;
-
-        // Speaker Mute Click
-        if (isMouseOver(mx, my, volStartX - 4, volY - 4, 18, 16)) {
-            int curVol = state.getVolumePercent() >= 0 ? state.getVolumePercent() : config.getVolume();
-            int newVol = (curVol > 0) ? 0 : 75;
-            stateManager.setVolume(newVol);
-            setStatus(newVol == 0 ? "Muted 🔇" : "Volume: " + newVol + "% 🔊");
+        // Volume Bar Click
+        int volY = controlsY + 36;
+        int volBarW = 100;
+        int volBarX = centerX - (volBarW / 2);
+        if (isMouseOver(mx, my, volBarX - 16, volY - 4, 16, 16)) {
+            // Mute / Unmute
+            int curVol = Math.round(dragVolumeRatio * 100);
+            stateManager.setVolume(curVol == 0 ? 50 : 0);
+            this.dragVolumeRatio = (curVol == 0 ? 0.5f : 0f);
+            playClickSound();
             return;
         }
-
-        // Volume Slider Click
         if (isMouseOver(mx, my, volBarX - 2, volY - 4, volBarW + 4, 12)) {
             this.isDraggingVolume = true;
             this.dragVolumeRatio = Math.max(0f, Math.min(1f, (float) (mx - volBarX) / volBarW));
-            int targetVol = (int) (dragVolumeRatio * 100);
+            int targetVol = Math.round(dragVolumeRatio * 100);
             stateManager.setVolume(targetVol);
-            setStatus("Volume: " + targetVol + "%");
+            config.setVolume(targetVol);
+            return;
         }
     }
 
+    private void handleLyricsClick(int mx, int my) {
+        // Reserved for interactive lyric clicking
+    }
+
     private void handleQueueClick(int mx, int my) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int currentY = contentY + 10 - queueScrollY;
-        if (stateManager.getCurrentState() != null) {
-            currentY += 60;
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int contentH = modalHeight - 54;
+
+        // 1. Refresh Button Click
+        int headerY = contentY;
+        int refreshW = 58;
+        int refreshH = 18;
+        int refreshX = contentX + contentW - refreshW - 14;
+        if (isMouseOver(mx, my, refreshX, headerY, refreshW, refreshH)) {
+            stateManager.requestQueueRefresh();
+            playClickSound();
+            setStatus("Queue refreshed");
+            return;
         }
-        int refBtnX = contentX + 10;
-        int refBtnY = currentY + 48;
-        if (isMouseOver(mx, my, refBtnX, refBtnY, 160, 24)) {
-            stateManager.fullReload();
-            setStatus("Bridge Reloaded!");
+
+        QueueResponse queue = stateManager.getCurrentQueue();
+        if (queue == null || queue.getQueue() == null) return;
+        List<QueueItem> items = queue.getQueue();
+        if (items.isEmpty()) return;
+
+        int listTopY = headerY + 22;
+        int curY = listTopY + 2 - queueScrollY;
+        int cardW = contentW - 14;
+
+        QueueItem cp = (queue != null) ? queue.getCurrentlyPlaying() : null;
+        if (cp == null && stateManager.getCurrentState() != null) {
+            PlaybackState s = stateManager.getCurrentState();
+            if (s.getTrackName() != null && !s.getTrackName().isEmpty()) {
+                curY += 34 + 6;
+            }
+        } else if (cp != null && cp.getName() != null && !cp.getName().isEmpty()) {
+            curY += 34 + 6;
+        }
+
+        int rowH = 30;
+        int btnSize = 16;
+
+        for (int i = 0; i < items.size(); i++) {
+            QueueItem item = items.get(i);
+            int rowY = curY;
+
+            if (rowY >= listTopY - rowH && rowY <= listTopY + (contentH - 22) + rowH) {
+                int actionX = contentX + cardW - 6 - (btnSize * 3 + 8);
+                int btnY = rowY + 7;
+                int upX = actionX;
+                int downX = upX + btnSize + 4;
+                int remX = downX + btnSize + 4;
+
+                // Move Up Button (▲)
+                if (i > 0 && isMouseOver(mx, my, upX, btnY, btnSize, btnSize)) {
+                    stateManager.moveQueueItem(i, i - 1);
+                    playClickSound();
+                    setStatus("Moved up: " + item.getName());
+                    return;
+                }
+
+                // Move Down Button (▼)
+                if (i < items.size() - 1 && isMouseOver(mx, my, downX, btnY, btnSize, btnSize)) {
+                    stateManager.moveQueueItem(i, i + 1);
+                    playClickSound();
+                    setStatus("Moved down: " + item.getName());
+                    return;
+                }
+
+                // Remove Button (x)
+                if (isMouseOver(mx, my, remX, btnY, btnSize, btnSize)) {
+                    stateManager.removeQueueItem(i);
+                    playClickSound();
+                    setStatus("Removed: " + item.getName());
+                    return;
+                }
+
+                // Click row body to play immediately
+                if (isMouseOver(mx, my, contentX, rowY, actionX - contentX, rowH)) {
+                    stateManager.playQueueItem(item.getId());
+                    playClickSound();
+                    setStatus("Playing: " + item.getName());
+                    return;
+                }
+            }
+
+            curY += rowH + 4;
+        }
+    }
+
+    private void handleHudEditorClick(int mx, int my) {
+        int contentX = modalX + sidebarWidth + 14;
+        int curY = modalY + 44;
+        int cardW = modalWidth - sidebarWidth - 28;
+        int btnW = 180;
+        int btnH = 28;
+        int btnX = contentX + (cardW - btnW) / 2;
+        int btnY = curY + 152;
+
+        if (isMouseOver(mx, my, btnX, btnY, btnW, btnH)) {
+            playClickSound();
+            if (this.minecraft != null) {
+                this.minecraft.setScreen(new HudEditorScreen(this));
+            }
         }
     }
 
     private void handleThemesClick(int mx, int my) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
 
-        int curY = contentY + 2 - themesScrollY;
-        curY += 14;
-
-        // 1. Theme Look Cards
+        int curY = contentY + 20 - themesScrollY;
         ThemeLook[] looks = ThemeLook.values();
-        int cardW = (contentW - 6) / 2;
         int cardH = 34;
+        int cardW = contentW - 14;
 
-        for (int i = 0; i < looks.length; i++) {
-            ThemeLook look = looks[i];
-            int col = i % 2;
-            int row = i / 2;
-            int cardX = contentX + (col * (cardW + 6));
-            int cardY = curY + (row * (cardH + 5));
-
-            if (isMouseOver(mx, my, cardX, cardY, cardW, cardH)) {
+        for (ThemeLook look : looks) {
+            if (isMouseOver(mx, my, contentX, curY, cardW, cardH)) {
                 config.setThemeLook(look);
-                setStatus("Theme: " + look.getTitle());
+                config.setThemeAccent(ThemeAccent.MATCH_THEME);
+                ThemeManager.invalidateCache();
+                AaRoundRect.clearCache();
+                setStatus("Applied Theme: " + look.getTitle());
+                playClickSound();
                 return;
             }
+            curY += cardH + 5;
         }
 
-        curY += (looks.length / 2) * (cardH + 5) + 8;
-        curY += 14;
+        curY += 8;
 
-        // 2. Accent Color Palette Swatches
-        ThemeAccent[] accents = ThemeAccent.values();
-        int swatchSize = 20;
-        int swatchSpacing = (contentW - (accents.length * swatchSize)) / (accents.length - 1);
-
-        for (int i = 0; i < accents.length; i++) {
-            ThemeAccent a = accents[i];
-            int sx = contentX + (i * (swatchSize + swatchSpacing));
-            int sy = curY;
-
-            if (isMouseOver(mx, my, sx - 2, sy - 2, swatchSize + 4, swatchSize + 4)) {
-                config.setThemeAccent(a);
-                setStatus("Accent: " + a.getTitle());
-                return;
-            }
-        }
-
-        curY += swatchSize + 14;
-        curY += 13;
-
-        // 3. Glass Opacity Slider
-        int cardRowH = 26;
-        int sliderW = 120;
-        int sliderX = contentX + contentW - sliderW - 10;
-        if (isMouseOver(mx, my, sliderX - 4, curY + 4, sliderW + 8, 16)) {
+        // Opacity Slider Click
+        int sliderW = 85;
+        int badgeW = 38;
+        int badgeX = contentX + cardW - 12 - badgeW;
+        int sliderX = badgeX - 8 - sliderW;
+        if (isMouseOver(mx, my, sliderX - 4, curY + 8, sliderW + 8, 20)) {
             this.isDraggingGlassOpacity = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
-            this.dragGlassOpacityRatio = ratio;
-            config.setGlassOpacity(0.40f + (ratio * 0.60f));
-            setStatus("Glass Opacity: " + config.getGlassOpacityPercent() + "%");
+            this.dragGlassOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            config.setGlassOpacity(0.40f + (dragGlassOpacityRatio * 0.60f));
+            AaRoundRect.clearCache();
             return;
         }
 
-        curY += cardRowH + 6;
+        curY += 48 + 16;
 
-        // 4. Sync HUD & Sky Switch
-        int switchW = 44;
-        int switchH = 14;
-        int switchX = contentX + contentW - switchW - 10;
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
-            config.setSyncHudTheme(!config.isSyncHudTheme());
-            setStatus("Sync Theme: " + (config.isSyncHudTheme() ? "Enabled" : "Disabled"));
+        ThemeAccent[] accents = ThemeAccent.values();
+        int gridCols = 3;
+        int cellW = (cardW - ((gridCols - 1) * 6)) / gridCols;
+        int cellH = 24;
+
+        for (int i = 0; i < accents.length; i++) {
+            int col = i % gridCols;
+            int row = i / gridCols;
+            int cellX = contentX + (col * (cellW + 6));
+            int cellY = curY + (row * (cellH + 5));
+
+            if (isMouseOver(mx, my, cellX, cellY, cellW, cellH)) {
+                config.setThemeAccent(accents[i]);
+                ThemeManager.invalidateCache();
+                AaRoundRect.clearCache();
+                setStatus("Accent Color: " + accents[i].getTitle());
+                playClickSound();
+                return;
+            }
         }
     }
 
     private void handleSettingsClick(int mx, int my) {
-        int contentX = modalX + 16;
-        int contentY = modalY + 52;
-        int contentW = modalWidth - 32;
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
 
-        int curY = contentY + 2 - settingsScrollY;
-        int rowH = 26;
-        int controlW = 120;
-        int controlX = contentX + contentW - controlW - 10;
-        int switchW = 44;
-        int switchH = 14;
-        int switchX = contentX + contentW - switchW - 10;
+        int curY = contentY + 4 - settingsScrollY;
+        int cardW = contentW - 14;
+        int rowH = 38;
 
-        // 1. In-Game HUD Toggle
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
-            config.setHudPosition(config.getHudPosition() == ModConfig.HudPosition.OFF ? ModConfig.HudPosition.TOP_RIGHT : ModConfig.HudPosition.OFF);
-            setStatus("In-Game HUD: " + (config.getHudPosition() != ModConfig.HudPosition.OFF ? "Enabled" : "Disabled"));
-            return;
-        }
-        curY += rowH + 4;
+        int sliderW = SLIDER_TRACK_W;
+        int badgeW = BADGE_TAG_W;
+        int badgeX = contentX + cardW - 14 - badgeW;
+        int sliderX = badgeX - 8 - sliderW;
+        int switchX = badgeX + (badgeW - 32);
+        int buttonW = 115;
+        int buttonX = contentX + cardW - 14 - buttonW;
 
-        // 1b. HUD Lyrics Line Toggle
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
-            config.setHudShowLyrics(!config.isHudShowLyrics());
-            setStatus("HUD Lyrics Line: " + (config.isHudShowLyrics() ? "Enabled" : "Disabled"));
-            return;
-        }
-        curY += rowH + 4;
+        // GROUP 1: CELESTIAL SKY LYRICS
+        curY += 15;
 
-        // 2. HUD Opacity Slider Click
-        if (isMouseOver(mx, my, controlX - 2, curY + 4, controlW + 4, 14)) {
-            this.isDraggingHudOpacity = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-            this.dragHudOpacityRatio = ratio;
-            config.setHudOpacity(ratio);
-            setStatus("HUD Opacity: " + config.getHudOpacityPercent() + "%");
-            return;
-        }
-        curY += rowH + 4;
-
-        // 3. HUD Scale Slider Click
-        if (isMouseOver(mx, my, controlX - 2, curY + 4, controlW + 4, 14)) {
-            this.isDraggingHudScale = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-            this.dragHudScaleRatio = ratio;
-            config.setHudScalePercent(Math.round(50 + ratio * 100));
-            setStatus("HUD Scale: " + config.getHudScalePercent() + "%");
-            return;
-        }
-        curY += rowH + 4;
-
-        // 4. 360° Sky Lyrics Toggle
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
+        // Row 1: Sky Lyrics Enable
+        int r1Y = curY;
+        if (isMouseOver(mx, my, switchX - 4, r1Y + 6, 40, 24)) {
             config.setSkyLyricsEnabled(!config.isSkyLyricsEnabled());
-            setStatus(config.isSkyLyricsEnabled() ? "Sky Lyrics: Enabled" : "Sky Lyrics: Disabled");
+            setStatus(config.isSkyLyricsEnabled() ? "Sky Lyrics Enabled" : "Sky Lyrics Disabled");
+            playClickSound();
             return;
         }
-        curY += rowH + 4;
 
-        // 4b. Sky Lyrics Direction Button Click
-        if (isMouseOver(mx, my, controlX, curY + 4, controlW, 18)) {
+        // Row 2: Sky Lyrics Direction (Fixed removed!)
+        int r2Y = curY + rowH;
+        if (isMouseOver(mx, my, buttonX, r2Y + 9, buttonW, 20)) {
             config.setSkyLyricsMode(config.getSkyLyricsMode().next());
             setStatus("Sky Direction: " + config.getSkyLyricsMode().getDisplayName());
+            playClickSound();
             return;
         }
-        curY += rowH + 4;
 
-        // 5. Sky Scale Slider Click
-        if (isMouseOver(mx, my, controlX - 2, curY + 4, controlW + 4, 14)) {
+        // Row 3: Sky Lyrics Scale
+        int r3Y = curY + (rowH * 2);
+        if (isMouseOver(mx, my, sliderX - 4, r3Y + 8, sliderW + 8, 20)) {
             this.isDraggingSkyScale = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-            this.dragSkyScaleRatio = ratio;
-            config.setSkyLyricsScalePercent(Math.round(50 + ratio * 150));
-            setStatus("Sky Scale: " + config.getSkyLyricsScalePercent() + "%");
+            this.dragSkyScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(50 + dragSkyScaleRatio * 150);
+            config.setSkyLyricsScalePercent(percent);
             return;
         }
-        curY += rowH + 4;
 
-        // 6. Sky Visible Lines Slider Click
-        if (isMouseOver(mx, my, controlX - 2, curY + 4, controlW + 4, 14)) {
+        // Row 4: Sky Visible Lines
+        int r4Y = curY + (rowH * 3);
+        if (isMouseOver(mx, my, sliderX - 4, r4Y + 8, sliderW + 8, 20)) {
             this.isDraggingSkyLines = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-            this.dragSkyLinesRatio = ratio;
-            config.setSkyLyricsLength(Math.round(3 + ratio * 22));
-            setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
+            this.dragSkyLinesRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int lines = Math.round(3 + dragSkyLinesRatio * 22);
+            config.setSkyLyricsLength(lines);
             return;
         }
-        curY += rowH + 4;
 
-        // 7. Typography Button Click
-        if (isMouseOver(mx, my, controlX, curY + 4, controlW, 18)) {
+        // Row 5: Typography
+        int r5Y = curY + (rowH * 4);
+        if (isMouseOver(mx, my, buttonX, r5Y + 9, buttonW, 20)) {
             config.setLyricFont(config.getLyricFont().next());
-            setStatus("Font: " + config.getLyricFont().getDisplayName());
-            return;
-        }
-        curY += rowH + 4;
-
-        // 8. Audio Ducking Toggle
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
-            config.setAudioDuckingEnabled(!config.isAudioDuckingEnabled());
-            setStatus("Ducking: " + (config.isAudioDuckingEnabled() ? "Enabled" : "Disabled"));
-            return;
-        }
-        curY += rowH + 4;
-
-        // 9. Ducking Multiplier Slider Click
-        if (isMouseOver(mx, my, controlX - 2, curY + 4, controlW + 4, 14)) {
-            this.isDraggingDucking = true;
-            float ratio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-            this.dragDuckingRatio = ratio;
-            config.setDuckingMultiplier(0.05f + (ratio * 0.95f));
-            setStatus("Ducking Volume: " + Math.round(config.getDuckingMultiplier() * 100) + "%");
-            return;
-        }
-        curY += rowH + 8;
-
-        // 9b. Anonymous Diagnostics Toggle
-        if (isMouseOver(mx, my, switchX, curY + 6, switchW, switchH)) {
-            config.setMetricsEnabled(!config.isMetricsEnabled());
-            setStatus("Diagnostics: " + (config.isMetricsEnabled() ? "Enabled" : "Disabled"));
-            return;
-        }
-        curY += rowH + 4;
-
-        // 10. Reload Bridge
-        int btnW = (contentW - 6) / 2;
-        if (isMouseOver(mx, my, contentX, curY, btnW, 22)) {
-            stateManager.fullReload();
-            setStatus("Bridge Reloaded!");
+            setStatus("Lyrics Font: " + config.getLyricFont().getDisplayName());
+            playClickSound();
             return;
         }
 
-        // 11. GitHub Updates
-        int btn2X = contentX + btnW + 6;
-        if (isMouseOver(mx, my, btn2X, curY, btnW, 22)) {
-            it.itzcrih.espoty.update.UpdateChecker checker = it.itzcrih.espoty.update.UpdateChecker.getInstance();
-            if (checker.isUpdateAvailable()) {
-                it.itzcrih.espoty.update.UpdateChecker.openWebpage(checker.getReleaseUrl());
-                setStatus("Opening release page...");
+        curY += (5 * rowH) + 16;
+
+        // GROUP 2: IN-GAME HUD OVERLAY
+        curY += 15;
+
+        // Row 1: HUD Enabled
+        int h1Y = curY;
+        if (isMouseOver(mx, my, switchX - 4, h1Y + 6, 40, 24)) {
+            if (config.getHudPosition() == ModConfig.HudPosition.OFF) {
+                if (config.getHudCustomX() >= 0 && config.getHudCustomY() >= 0) {
+                    config.setHudPosition(ModConfig.HudPosition.CUSTOM);
+                } else {
+                    config.setHudPosition(ModConfig.HudPosition.TOP_RIGHT);
+                }
+                setStatus("HUD Enabled (" + config.getHudPosition().getDisplayName() + ")");
             } else {
-                setStatus("Checking for updates...");
-                checker.checkForUpdatesAsync().thenAccept(avail -> {
-                    setStatus(avail ? "Update available: v" + checker.getLatestVersion() : "eSpoty is up to date (v" + it.itzcrih.espoty.update.UpdateChecker.getCurrentVersion() + ")");
-                });
+                config.setHudPosition(ModConfig.HudPosition.OFF);
+                setStatus("HUD Disabled");
             }
+            playClickSound();
             return;
         }
 
-        curY += 28;
+        // Row 2: HUD Lyrics Line
+        int h2Y = curY + rowH;
+        if (isMouseOver(mx, my, switchX - 4, h2Y + 6, 40, 24)) {
+            config.setHudShowLyrics(!config.isHudShowLyrics());
+            setStatus(config.isHudShowLyrics() ? "HUD Lyrics Line Enabled" : "HUD Lyrics Line Hidden");
+            playClickSound();
+            return;
+        }
 
-        // 12. Author Website
-        if (isMouseOver(mx, my, contentX + 2, curY, 280, 12)) {
-            it.itzcrih.espoty.update.UpdateChecker.openWebpage("https://itzcrih.it");
+        // Row 3: HUD Opacity
+        int h3Y = curY + (rowH * 2);
+        if (isMouseOver(mx, my, sliderX - 4, h3Y + 8, sliderW + 8, 20)) {
+            this.isDraggingHudOpacity = true;
+            this.dragHudOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(dragHudOpacityRatio * 100);
+            config.setHudOpacityPercent(percent);
+            return;
+        }
+
+        // Row 4: HUD Scale
+        int h4Y = curY + (rowH * 3);
+        if (isMouseOver(mx, my, sliderX - 4, h4Y + 8, sliderW + 8, 20)) {
+            this.isDraggingHudScale = true;
+            this.dragHudScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(50 + dragHudScaleRatio * 100);
+            config.setHudScalePercent(percent);
+            return;
+        }
+
+        curY += (4 * rowH) + 16;
+
+        // GROUP 3: AUDIO DUCKING & UTILITIES
+        curY += 15;
+
+        // Row 1: Ducking
+        int a1Y = curY;
+        if (isMouseOver(mx, my, switchX - 4, a1Y + 6, 40, 24)) {
+            config.setAudioDuckingEnabled(!config.isAudioDuckingEnabled());
+            setStatus(config.isAudioDuckingEnabled() ? "Audio Ducking Active" : "Audio Ducking Disabled");
+            playClickSound();
+            return;
+        }
+
+        // Row 2: Ducking Multiplier
+        int a2Y = curY + rowH;
+        if (isMouseOver(mx, my, sliderX - 4, a2Y + 8, sliderW + 8, 20)) {
+            this.isDraggingDucking = true;
+            this.dragDuckingRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            float mult = 0.05f + (dragDuckingRatio * 0.95f);
+            config.setDuckingMultiplier(mult);
+            return;
+        }
+
+        // Row 3: Diagnostics
+        int a3Y = curY + (rowH * 2);
+        if (isMouseOver(mx, my, switchX - 4, a3Y + 6, 40, 24)) {
+            config.setMetricsEnabled(!config.isMetricsEnabled());
+            setStatus(config.isMetricsEnabled() ? "Anonymous Diagnostics Enabled" : "Diagnostics Disabled");
+            playClickSound();
+            return;
+        }
+
+        // Row 4: Buttons
+        int a4Y = curY + (rowH * 3);
+        int btnW = (cardW - 32) / 2;
+        if (isMouseOver(mx, my, contentX + 12, a4Y + 8, btnW, 22)) {
+            SpotifyStateManager.getInstance().fullReload();
+            setStatus("Reloading Windows Media Bridge...");
+            playClickSound();
+            return;
+        }
+
+        int btn2X = contentX + 12 + btnW + 8;
+        if (isMouseOver(mx, my, btn2X, a4Y + 8, btnW, 22)) {
+            it.itzcrih.espoty.update.UpdateChecker.getInstance().checkForUpdatesAsync();
+            setStatus("Checking for updates online...");
+            playClickSound();
+            return;
+        }
+
+        curY += (4 * rowH) + 20;
+
+        // Author credits link
+        if (isMouseOver(mx, my, contentX + 2, curY, 260, 12)) {
+            try {
+                net.minecraft.util.Util.getPlatform().openUri(new java.net.URI("https://itzcrih.it"));
+            } catch (Exception ignored) {}
+            playClickSound();
         }
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        if (event.button() == 0) {
-            int mx = (int) event.x();
-            int contentX = modalX + 16;
-            int contentW = modalWidth - 32;
+        int mx = (int) event.x();
+        boolean hasAnyDrag = isDraggingSeek || isDraggingVolume || isDraggingHudOpacity
+                || isDraggingHudScale || isDraggingSkyScale || isDraggingSkyLines
+                || isDraggingGlassOpacity || isDraggingDucking;
 
-            if (isDraggingSeek) {
-                this.dragSeekRatio = Math.max(0f, Math.min(1f, (float) (mx - contentX) / contentW));
-                return true;
-            }
-
-            if (isDraggingVolume) {
-                int centerX = modalX + (modalWidth / 2);
-                int volBarW = 110;
-                int volStartX = centerX - 80;
-                int volBarX = volStartX + 18;
-                this.dragVolumeRatio = Math.max(0f, Math.min(1f, (float) (mx - volBarX) / volBarW));
-                int targetVol = (int) (dragVolumeRatio * 100);
-                stateManager.setVolume(targetVol);
-                setStatus("Volume: " + targetVol + "%");
-                return true;
-            }
-
-            int controlW = 120;
-            int controlX = contentX + contentW - controlW - 10;
-
-            if (isDraggingHudOpacity) {
-                this.dragHudOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setHudOpacity(dragHudOpacityRatio);
-                setStatus("HUD Opacity: " + config.getHudOpacityPercent() + "%");
-                return true;
-            }
-
-            if (isDraggingHudScale) {
-                this.dragHudScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setHudScalePercent(Math.round(50 + dragHudScaleRatio * 100));
-                setStatus("HUD Scale: " + config.getHudScalePercent() + "%");
-                return true;
-            }
-
-            if (isDraggingSkyScale) {
-                this.dragSkyScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setSkyLyricsScalePercent(Math.round(50 + dragSkyScaleRatio * 150));
-                setStatus("Sky Scale: " + config.getSkyLyricsScalePercent() + "%");
-                return true;
-            }
-
-            if (isDraggingSkyLines) {
-                this.dragSkyLinesRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 22));
-                setStatus("Sky Lines: " + config.getSkyLyricsLength() + " lines");
-                return true;
-            }
-
-            if (isDraggingGlassOpacity) {
-                this.dragGlassOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setGlassOpacity(0.40f + (dragGlassOpacityRatio * 0.60f));
-                setStatus("Glass Opacity: " + config.getGlassOpacityPercent() + "%");
-                return true;
-            }
-
-            if (isDraggingDucking) {
-                this.dragDuckingRatio = Math.max(0f, Math.min(1f, (float) (mx - controlX) / controlW));
-                config.setDuckingMultiplier(0.05f + (dragDuckingRatio * 0.95f));
-                setStatus("Ducking Volume: " + Math.round(config.getDuckingMultiplier() * 100) + "%");
-                return true;
-            }
+        if (!hasAnyDrag) {
+            return super.mouseDragged(event, dragX, dragY);
         }
+
+        int contentX = modalX + sidebarWidth + 14;
+        int contentW = modalWidth - sidebarWidth - 28;
+        int contentY = modalY + 46;
+        int cardW = contentW - 10;
+        int sliderW = SLIDER_TRACK_W;
+        int badgeW = BADGE_TAG_W;
+        int badgeX = contentX + cardW - 14 - badgeW;
+        int sliderX = badgeX - 8 - sliderW;
+
+        if (isDraggingSeek) {
+            int seekW = contentW - 8;
+            int seekX = contentX + 4;
+            this.dragSeekRatio = Math.max(0f, Math.min(1f, (float) (mx - seekX) / seekW));
+            PlaybackState state = stateManager.getCurrentState();
+            if (state != null && state.getDurationMs() > 0) {
+                long targetMs = (long) (state.getDurationMs() * dragSeekRatio);
+                stateManager.seek(targetMs);
+            }
+            return true;
+        }
+
+        if (isDraggingVolume) {
+            int centerX = contentX + (contentW / 2);
+            int volBarW = 100;
+            int volBarX = centerX - (volBarW / 2);
+            this.dragVolumeRatio = Math.max(0f, Math.min(1f, (float) (mx - volBarX) / volBarW));
+            int targetVol = Math.round(dragVolumeRatio * 100);
+            stateManager.setVolume(targetVol);
+            config.setVolume(targetVol);
+            return true;
+        }
+
+        if (isDraggingGlassOpacity) {
+            int themesBadgeX = contentX + contentW - 12 - badgeW;
+            int themesSliderX = themesBadgeX - 8 - sliderW;
+            this.dragGlassOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - themesSliderX) / sliderW));
+            config.setGlassOpacity(0.40f + (dragGlassOpacityRatio * 0.60f));
+            AaRoundRect.clearCache();
+            return true;
+        }
+
+        if (isDraggingHudOpacity) {
+            this.dragHudOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(dragHudOpacityRatio * 100);
+            config.setHudOpacityPercent(percent);
+            return true;
+        }
+
+        if (isDraggingHudScale) {
+            this.dragHudScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(50 + dragHudScaleRatio * 100);
+            config.setHudScalePercent(percent);
+            return true;
+        }
+
+        if (isDraggingSkyScale) {
+            this.dragSkyScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(50 + dragSkyScaleRatio * 150);
+            config.setSkyLyricsScalePercent(percent);
+            return true;
+        }
+
+        if (isDraggingSkyLines) {
+            this.dragSkyLinesRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int lines = Math.round(3 + dragSkyLinesRatio * 22);
+            config.setSkyLyricsLength(lines);
+            return true;
+        }
+
+        if (isDraggingDucking) {
+            this.dragDuckingRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            float mult = 0.05f + (dragDuckingRatio * 0.95f);
+            config.setDuckingMultiplier(mult);
+            return true;
+        }
+
         return super.mouseDragged(event, dragX, dragY);
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == 0) {
-            if (isDraggingSeek) {
-                PlaybackState state = stateManager.getCurrentState();
-                if (state != null) {
-                    long targetMs = (long) (state.getDurationMs() * dragSeekRatio);
-                    stateManager.seek(targetMs);
-                }
-                isDraggingSeek = false;
-            }
-            if (isDraggingVolume) {
-                int targetVol = (int) (dragVolumeRatio * 100);
-                stateManager.setVolume(targetVol);
-                isDraggingVolume = false;
-            }
-            if (isDraggingHudOpacity) {
-                config.setHudOpacity(dragHudOpacityRatio);
-                isDraggingHudOpacity = false;
-            }
-            if (isDraggingHudScale) {
-                config.setHudScalePercent(Math.round(50 + dragHudScaleRatio * 100));
-                isDraggingHudScale = false;
-            }
-            if (isDraggingSkyScale) {
-                config.setSkyLyricsScalePercent(Math.round(50 + dragSkyScaleRatio * 150));
-                isDraggingSkyScale = false;
-            }
-            if (isDraggingSkyLines) {
-                config.setSkyLyricsLength(Math.round(3 + dragSkyLinesRatio * 22));
-                isDraggingSkyLines = false;
-            }
-            if (isDraggingGlassOpacity) {
-                config.setGlassOpacity(0.40f + (dragGlassOpacityRatio * 0.60f));
-                isDraggingGlassOpacity = false;
-            }
-            if (isDraggingDucking) {
-                config.setDuckingMultiplier(0.05f + (dragDuckingRatio * 0.95f));
-                isDraggingDucking = false;
-            }
-        }
+        this.isDraggingSeek = false;
+        this.isDraggingVolume = false;
+        this.isDraggingHudOpacity = false;
+        this.isDraggingHudScale = false;
+        this.isDraggingSkyScale = false;
+        this.isDraggingSkyLines = false;
+        this.isDraggingGlassOpacity = false;
+        this.isDraggingDucking = false;
         return super.mouseReleased(event);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (verticalAmount != 0) {
-            int delta = (int) (-verticalAmount * 16);
-            switch (currentTab) {
-                case SETTINGS -> settingsScrollY = Math.max(0, settingsScrollY + delta);
-                case THEMES -> themesScrollY = Math.max(0, themesScrollY + delta);
-                case LYRICS -> lyricsScrollY = Math.max(0, lyricsScrollY + delta);
-                case QUEUE -> queueScrollY = Math.max(0, queueScrollY + delta);
-                default -> {}
+        int delta = (int) (-verticalAmount * 16);
+        int viewH = modalHeight - 54;
+        switch (activeTab) {
+            case LYRICS -> {
+                LyricsManager.SongLyrics songLyrics = LyricsManager.getInstance().getCurrentLyrics();
+                int lyricsTotalH = (songLyrics != null && songLyrics.getLines() != null) ? songLyrics.getLines().size() * 22 : 0;
+                int maxScroll = Math.max(0, lyricsTotalH - viewH);
+                this.lyricsScrollY = Math.max(0, Math.min(maxScroll, this.lyricsScrollY + delta));
+                return true;
             }
-            return true;
+            case QUEUE -> {
+                QueueResponse queue = stateManager.getCurrentQueue();
+                int itemsCount = (queue != null && queue.getQueue() != null) ? queue.getQueue().size() : 0;
+                int queueTotalH = 40 + (itemsCount * 34) + 12;
+                int maxScroll = Math.max(0, queueTotalH - (viewH - 22));
+                this.queueScrollY = Math.max(0, Math.min(maxScroll, this.queueScrollY + delta));
+                return true;
+            }
+            case THEMES -> {
+                int maxScroll = Math.max(0, THEMES_CONTENT_HEIGHT - viewH);
+                this.themesScrollY = Math.max(0, Math.min(maxScroll, this.themesScrollY + delta));
+                return true;
+            }
+            case SETTINGS -> {
+                int maxScroll = Math.max(0, SETTINGS_CONTENT_HEIGHT - viewH);
+                this.settingsScrollY = Math.max(0, Math.min(maxScroll, this.settingsScrollY + delta));
+                return true;
+            }
         }
         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
-    public void startCloseAnimation() {
-        if (!isClosing) {
-            this.isClosing = true;
-            this.closeStartTime = System.currentTimeMillis();
-        }
-    }
-
     @Override
-    public void onClose() {
-        startCloseAnimation();
-    }
-
-    @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
-            startCloseAnimation();
-            return true;
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        int keyCode = event.key();
+        // Spacebar toggles playback on Player tab
+        if (keyCode == 32 && activeTab == Tab.PLAYER) {
+            PlaybackState state = stateManager.getCurrentState();
+            if (state != null && state.canPlayPause()) {
+                stateManager.togglePlayPause();
+                playClickSound();
+                return true;
+            }
         }
 
-        if (it.itzcrih.espoty.client.ESpotyModClient.getKeyOpenGui() != null
-                && it.itzcrih.espoty.client.ESpotyModClient.getKeyOpenGui().matches(event)) {
-            startCloseAnimation();
-            return true;
-        }
-
-        if (event.key() == GLFW.GLFW_KEY_SPACE && currentTab == Tab.PLAYER) {
-            stateManager.togglePlayPause();
+        // Escape triggers smooth exit animation
+        if (keyCode == 256) {
+            triggerCloseAnimation();
             return true;
         }
 
         return super.keyPressed(event);
     }
 
-    private boolean isMouseOver(int mx, int my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
+    private void triggerCloseAnimation() {
+        if (!isClosing) {
+            this.isClosing = true;
+            this.closeStartTime = System.currentTimeMillis();
+        }
     }
 
-    private String trimWithEllipsis(String text, int maxWidth) {
-        if (this.font.width(text) <= maxWidth) return text;
-        while (!text.isEmpty() && this.font.width(text + "...") > maxWidth) {
-            text = text.substring(0, text.length() - 1);
-        }
-        return text + "...";
+    private boolean isMouseOver(double mouseX, double mouseY, int x, int y, int w, int h) {
+        return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
     }
 }

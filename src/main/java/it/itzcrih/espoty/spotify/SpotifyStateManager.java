@@ -1,11 +1,15 @@
 package it.itzcrih.espoty.spotify;
 
 import it.itzcrih.espoty.ESpotyMod;
+import it.itzcrih.espoty.config.ModConfig;
 import it.itzcrih.espoty.gui.texture.AlbumArtManager;
 import it.itzcrih.espoty.lyrics.LyricsManager;
 import it.itzcrih.espoty.spotify.models.PlaybackState;
 import it.itzcrih.espoty.spotify.models.QueueItem;
 import it.itzcrih.espoty.spotify.models.QueueResponse;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -134,8 +138,14 @@ public class SpotifyStateManager {
             AlbumArtManager.getInstance().getAlbumTexture(artUrl);
         }
 
-        // Anchor progress directly to packet timestamp for smooth, monotonically increasing 60 FPS playback
+        // Anchor progress to timestamp
         this.stateFetchTimestamp = System.currentTimeMillis();
+
+        int effectiveVol = (volumePercent >= 0)
+                ? volumePercent
+                : (this.currentState != null && this.currentState.getVolumePercent() >= 0
+                        ? this.currentState.getVolumePercent()
+                        : ModConfig.getInstance().getVolume());
 
         this.currentState = new PlaybackState(
                 "local_" + trackKey.hashCode(),
@@ -148,7 +158,7 @@ public class SpotifyStateManager {
                 playing,
                 shuffle,
                 repeat,
-                volumePercent,
+                effectiveVol,
                 "Spotify Desktop (PC)",
                 "Computer",
                 canPlayPause,
@@ -192,7 +202,7 @@ public class SpotifyStateManager {
     }
 
     /**
-     * Calculates client-interpolated playback progress for smooth 60 FPS HUD and lyrics.
+     * Calculates client-interpolated playback progress.
      */
     public long getInterpolatedProgressMs() {
         PlaybackState s = currentState;
@@ -220,6 +230,75 @@ public class SpotifyStateManager {
         windowsBridge.restart();
     }
 
+    public synchronized void updateQueueFromJson(JsonObject data) {
+        if (data == null) return;
+        try {
+            QueueItem curItem = null;
+            if (data.has("currently_playing") && data.get("currently_playing").isJsonObject()) {
+                JsonObject cp = data.getAsJsonObject("currently_playing");
+                String uri = cp.has("uri") ? cp.get("uri").getAsString() : "";
+                String name = cp.has("name") ? cp.get("name").getAsString() : "";
+                String artist = cp.has("artist") ? cp.get("artist").getAsString() : "";
+                curItem = new QueueItem(uri, name, artist, "", "", 0);
+            }
+
+            List<QueueItem> nextList = new ArrayList<>();
+            if (data.has("next_tracks") && data.get("next_tracks").isJsonArray()) {
+                JsonArray arr = data.getAsJsonArray("next_tracks");
+                for (JsonElement el : arr) {
+                    if (el.isJsonObject()) {
+                        JsonObject obj = el.getAsJsonObject();
+                        String uri = obj.has("uri") ? obj.get("uri").getAsString() : "";
+                        String name = obj.has("name") ? obj.get("name").getAsString() : "";
+                        String artist = obj.has("artist") ? obj.get("artist").getAsString() : "";
+                        nextList.add(new QueueItem(uri, name, artist, "", "", 0));
+                    }
+                }
+            }
+            this.currentQueue = new QueueResponse(curItem, nextList);
+        } catch (Exception e) {
+            ESpotyMod.LOGGER.debug("[eSpoty] Failed to parse CLI queue JSON", e);
+        }
+    }
+
+    public void requestQueueRefresh() {
+        windowsBridge.sendCommand("queue:list");
+        if (auth.isAuthenticated()) {
+            client.fetchQueue().thenAccept(q -> {
+                if (q != null) this.currentQueue = q;
+            });
+        }
+    }
+
+    public synchronized void removeQueueItem(int index) {
+        if (currentQueue != null) {
+            List<QueueItem> items = new ArrayList<>(currentQueue.getQueue());
+            if (index >= 0 && index < items.size()) {
+                items.remove(index);
+                this.currentQueue = new QueueResponse(currentQueue.getCurrentlyPlaying(), items);
+            }
+        }
+        windowsBridge.sendCommand("queue:remove:" + index);
+    }
+
+    public synchronized void moveQueueItem(int fromIndex, int toIndex) {
+        if (currentQueue != null) {
+            List<QueueItem> items = new ArrayList<>(currentQueue.getQueue());
+            if (fromIndex >= 0 && fromIndex < items.size() && toIndex >= 0 && toIndex < items.size() && fromIndex != toIndex) {
+                QueueItem item = items.remove(fromIndex);
+                items.add(toIndex, item);
+                this.currentQueue = new QueueResponse(currentQueue.getCurrentlyPlaying(), items);
+            }
+        }
+        windowsBridge.sendCommand("queue:move:" + fromIndex + ":" + toIndex);
+    }
+
+    public void playQueueItem(String uri) {
+        if (uri != null && !uri.isEmpty()) {
+            windowsBridge.sendCommand("queue:play:" + uri);
+        }
+    }
+
     public void refreshQueue(Consumer<QueueResponse> callback) {
         if (auth.isAuthenticated()) {
             client.fetchQueue().thenAccept(queue -> {
@@ -227,14 +306,8 @@ public class SpotifyStateManager {
                 if (callback != null) callback.accept(queue);
             });
         } else {
-            PlaybackState s = currentState;
-            if (s != null) {
-                QueueItem cur = new QueueItem(s.getTrackId(), s.getTrackName(), s.getArtistNames(), s.getAlbumName(), s.getAlbumArtUrl(), s.getDurationMs());
-                this.currentQueue = new QueueResponse(cur, Collections.emptyList());
-            } else {
-                this.currentQueue = new QueueResponse(null, Collections.emptyList());
-            }
-            if (callback != null) callback.accept(this.currentQueue);
+            windowsBridge.sendCommand("queue:list");
+            if (callback != null && currentQueue != null) callback.accept(currentQueue);
         }
     }
 

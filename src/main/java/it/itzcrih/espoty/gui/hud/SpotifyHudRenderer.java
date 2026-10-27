@@ -20,19 +20,19 @@ import net.minecraft.sounds.SoundEvents;
 
 public class SpotifyHudRenderer {
 
-    // Fluid Animation States
+    // Animation states
     private static float currentExtraHeight = 0f;
     private static String lastLyricLine = "";
     private static String prevLyricLine = "";
     private static long lyricLineChangeTime = 0;
 
-    // Zero-allocation lyric component & metric cache for 0 FPS drops
+    // Lyric component cache
     private static Component cachedLyricComp = null;
     private static int cachedLyricWidth = 0;
     private static Component cachedPrevLyricComp = null;
     private static ModConfig.LyricFont lastCachedFont = null;
 
-    // Chat Interactive Playback Controls State
+    // Chat playback controls state
     private static float chatControlsProgress = 0.0f;
     private static int cachedScreenX = 0;
     private static int cachedScreenY = 0;
@@ -110,7 +110,7 @@ public class SpotifyHudRenderer {
 
         int cardHeight = config.isHudCompact() ? 44 : 54;
 
-        // 1. Fluid Dynamic Height Expansion / Collapse Animation for Lyrics
+        // Height expansion animation for lyrics
         float targetExtraHeight = (showLyrics && hasActiveLyric) ? 17f : 0f;
         currentExtraHeight += (targetExtraHeight - currentExtraHeight) * 0.18f;
         if (Math.abs(targetExtraHeight - currentExtraHeight) < 0.1f) {
@@ -141,6 +141,17 @@ public class SpotifyHudRenderer {
                 screenX = screenWidth - (int) (cardWidth * scale) - margin + slideOffset;
                 screenY = margin;
             }
+            case CUSTOM -> {
+                int cx = config.getHudCustomX();
+                int cy = config.getHudCustomY();
+                if (cx < 0 || cy < 0) {
+                    screenX = screenWidth - (int) (cardWidth * scale) - margin + slideOffset;
+                    screenY = margin;
+                } else {
+                    screenX = cx;
+                    screenY = cy;
+                }
+            }
             default -> {
                 return;
             }
@@ -152,7 +163,9 @@ public class SpotifyHudRenderer {
         cachedScale = scale;
         cachedCardWidth = cardWidth;
         cachedTotalHeight = dynamicTotalHeight;
-        cachedIsBottom = (config.getHudPosition() == ModConfig.HudPosition.BOTTOM_LEFT || config.getHudPosition() == ModConfig.HudPosition.BOTTOM_RIGHT);
+        cachedIsBottom = (config.getHudPosition() == ModConfig.HudPosition.BOTTOM_LEFT
+                || config.getHudPosition() == ModConfig.HudPosition.BOTTOM_RIGHT
+                || (config.getHudPosition() == ModConfig.HudPosition.CUSTOM && screenY > screenHeight / 2));
 
         guiGraphics.pose().pushMatrix();
         guiGraphics.pose().translate((float) screenX, (float) screenY);
@@ -162,23 +175,8 @@ public class SpotifyHudRenderer {
         int x = 0;
         int y = 0;
 
-        // 2. Unified Modern Glass Card with dynamic user opacity
+        // 2. Card background
         renderModernCard(guiGraphics, x, y, cardWidth, dynamicTotalHeight, effectiveAlpha);
-
-        // 3. Subtle Track Change Golden Shimmer Wave
-        if (trackAge < 450) {
-            float sweepProgress = (float) trackAge / 450.0f;
-            int sweepCenter = x + (int) (sweepProgress * cardWidth);
-            int sweepW = 32;
-            int sweepX1 = Math.max(x + 4, sweepCenter - sweepW);
-            int sweepX2 = Math.min(x + cardWidth - 4, sweepCenter + sweepW);
-            if (sweepX2 > sweepX1) {
-                float sweepAlpha = (float) Math.sin(sweepProgress * Math.PI) * effectiveAlpha;
-                guiGraphics.fillGradient(sweepX1, y, sweepX2, y + 2,
-                        applyAlpha(0x00FFD700, sweepAlpha),
-                        applyAlpha(0xFFFFFDE7, sweepAlpha));
-            }
-        }
 
         // 4. Album Cover (Chamfered frame)
         int artSize = config.isHudCompact() ? 32 : 38;
@@ -201,7 +199,7 @@ public class SpotifyHudRenderer {
         long progressMs = stateManager.getInterpolatedProgressMs();
         boolean isLiked = stateManager.isCurrentTrackLiked();
         if (isLiked) {
-            guiGraphics.drawString(font, "❤", x + cardWidth - 44, titleY, applyAlpha(accentColor, effectiveAlpha), true);
+            guiGraphics.drawString(font, "+", x + cardWidth - 44, titleY, applyAlpha(accentColor, effectiveAlpha), true);
         }
         AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, x + cardWidth - 32, titleY + 9, 24, 9, 6,
                 state.isPlaying(), progressMs, effectiveAlpha, accentColor, accent2Color,
@@ -263,7 +261,7 @@ public class SpotifyHudRenderer {
             guiGraphics.pose().popMatrix();
         }
 
-        // 7. Fluid Animated Lyric Line under HUD (Only when showLyrics is enabled in settings)
+        // Lyric line under HUD
         if (showLyrics && hasActiveLyric && currentExtraHeight > 2.0f) {
             String lyricText = currentLyric.getText();
             ModConfig.LyricFont currentFont = config.getLyricFont();
@@ -295,7 +293,7 @@ public class SpotifyHudRenderer {
                     applyAlpha(0x22FFFFFF, effectiveAlpha * heightRatio));
 
             int lyricY = dividerY + 4 + lyricYOffset;
-            guiGraphics.drawString(font, "♪", x + 8, lyricY, applyAlpha(accentColor, lineAlpha), true);
+            guiGraphics.drawString(font, "~", x + 8, lyricY, applyAlpha(accentColor, lineAlpha), true);
 
             int maxLyricW = cardWidth - 28;
             Component lyricComp = (cachedLyricComp != null) ? cachedLyricComp : Component.literal(lyricText).withStyle(currentFont.getStyle());
@@ -325,7 +323,7 @@ public class SpotifyHudRenderer {
             cachedPrevLyricComp = null;
         }
 
-        // 8. Interactive Chat Playback Controls (Revealed smoothly when player opens ChatScreen)
+        // Interactive Chat Playback Controls
         boolean isChatOpen = (client.screen instanceof ChatScreen);
         chatControlsProgress += ((isChatOpen ? 1.0f : 0.0f) - chatControlsProgress) * 0.22f;
         if (Math.abs((isChatOpen ? 1.0f : 0.0f) - chatControlsProgress) < 0.01f) {
@@ -366,18 +364,8 @@ public class SpotifyHudRenderer {
         int dockX = x;
         int dockY = isBottom ? (y - dockH - 4) : (y + cardH + 4);
 
-        // 1. Sleek Glass Control Dock Container
-        guiGraphics.fill(dockX + 1, dockY + 2, dockX + dockW - 1, dockY + dockH + 3, applyAlpha(0x35000000, alpha * 0.6f));
-        guiGraphics.fill(dockX + 2, dockY, dockX + dockW - 2, dockY + dockH, applyAlpha(0xEB0D0D14, alpha));
-        guiGraphics.fill(dockX, dockY + 2, dockX + 2, dockY + dockH - 2, applyAlpha(0xEB0D0D14, alpha));
-        guiGraphics.fill(dockX + dockW - 2, dockY + 2, dockX + dockW, dockY + dockH - 2, applyAlpha(0xEB0D0D14, alpha));
-
-        // Delicate border & top sheen
-        int border = applyAlpha(accentColor, alpha * 0.35f);
-        guiGraphics.fill(dockX + 2, dockY + dockH - 1, dockX + dockW - 2, dockY + dockH, border);
-        guiGraphics.fill(dockX, dockY + 2, dockX + 1, dockY + dockH - 2, border);
-        guiGraphics.fill(dockX + dockW - 1, dockY + 2, dockX + dockW, dockY + dockH - 2, border);
-        guiGraphics.fillGradient(dockX + 4, dockY, dockX + dockW - 4, dockY + 1, applyAlpha(accentColor, alpha * 0.75f), applyAlpha(accent2Color, alpha * 0.35f));
+        // Controls dock
+        guiGraphics.fill(dockX + 2, dockY + 1, dockX + dockW - 2, dockY + dockH - 1, applyAlpha(0x28000000, alpha));
 
         Font font = Minecraft.getInstance().font;
         int centerX = dockX + (dockW / 2);
@@ -386,27 +374,27 @@ public class SpotifyHudRenderer {
         int prevX = centerX - 46;
         int prevY = dockY + 2;
         boolean prevHover = (mouseX >= prevX && mouseX <= prevX + 22 && mouseY >= prevY && mouseY <= prevY + 18);
-        renderControlBtn(guiGraphics, font, "⏮", prevX, prevY, 22, 18, prevHover, alpha, accentColor);
+        renderControlBtn(guiGraphics, font, "<<", prevX, prevY, 22, 18, prevHover, alpha, accentColor);
 
         // Play / Pause Button: centerX - 13, w = 26, h = 18
         int playX = centerX - 13;
         int playY = dockY + 2;
         boolean playHover = (mouseX >= playX && mouseX <= playX + 26 && mouseY >= playY && mouseY <= playY + 18);
-        String playIcon = state.isPlaying() ? "❚❚" : "▶";
+        String playIcon = state.isPlaying() ? "||" : ">";
         renderControlBtn(guiGraphics, font, playIcon, playX, playY, 26, 18, playHover, alpha, accentColor);
 
         // Next Button: centerX + 24, w = 22, h = 18
         int nextX = centerX + 24;
         int nextY = dockY + 2;
         boolean nextHover = (mouseX >= nextX && mouseX <= nextX + 22 && mouseY >= nextY && mouseY <= nextY + 18);
-        renderControlBtn(guiGraphics, font, "⏭", nextX, nextY, 22, 18, nextHover, alpha, accentColor);
+        renderControlBtn(guiGraphics, font, ">>", nextX, nextY, 22, 18, nextHover, alpha, accentColor);
 
         // Like / Unlike Button: centerX + 56, w = 20, h = 18
         int likeX = centerX + 56;
         int likeY = dockY + 2;
         boolean likeHover = (mouseX >= likeX && mouseX <= likeX + 20 && mouseY >= likeY && mouseY <= likeY + 18);
         boolean isLiked = SpotifyStateManager.getInstance().isCurrentTrackLiked();
-        String likeIcon = isLiked ? "❤" : "♡";
+        String likeIcon = isLiked ? "[+]" : "[-]";
         renderControlBtn(guiGraphics, font, likeIcon, likeX, likeY, 20, 18, likeHover, alpha, isLiked ? 0xFFFF4081 : accentColor);
     }
 
@@ -422,9 +410,9 @@ public class SpotifyHudRenderer {
 
         int textColor = hover ? applyAlpha(0xFFFFFFFF, alpha) : applyAlpha(0xD0FFFFFF, alpha);
         int textW = switch (text) {
-            case "⏮", "⏭" -> 9;
-            case "▶", "❚❚" -> 7;
-            case "❤", "♡" -> 8;
+            case "<<", ">>" -> 9;
+            case ">", "||" -> 7;
+            case "[+]", "[-]" -> 8;
             default -> font.width(text);
         };
         int tx = bx + (bw - textW) / 2;
@@ -497,56 +485,42 @@ public class SpotifyHudRenderer {
     }
 
     private static void renderModernCard(GuiGraphics guiGraphics, int x, int y, int width, int height, float effectiveAlpha) {
-        float effectiveBgAlpha = effectiveAlpha;
-        float effectiveBorderAlpha = Math.min(1.0f, effectiveAlpha * 1.15f);
+        ModConfig config = ModConfig.getInstance();
+        int accentColor = config.isSyncHudTheme() ? ThemeManager.getAccent() : 0xFFFFD700;
 
-        // 1. Soft Multi-Layer Drop Shadow
-        guiGraphics.fill(x + 1, y + 2, x + width - 1, y + height + 3, applyAlpha(0x38000000, effectiveAlpha * 0.6f));
-        guiGraphics.fill(x + 2, y + 3, x + width - 2, y + height + 5, applyAlpha(0x22000000, effectiveAlpha * 0.5f));
+        // 1. Horizontal gradient glow
+        int steps = 24;
+        int glowWidth = Math.min(width, 180);
+        float stepW = (float) glowWidth / (float) steps;
+        for (int i = 0; i < steps; i++) {
+            float t = (float) i / (float) steps;
+            float falloff = (1.0f - t) * (1.0f - t);
+            int glow = applyAlpha(accentColor, falloff * 0.20f * effectiveAlpha);
+            int gx1 = x + (int) (i * stepW);
+            int gx2 = x + (int) ((i + 1) * stepW);
+            guiGraphics.fill(gx1, y - 2, gx2, y + height + 2, glow);
+        }
 
-        // 2. Beveled/Chamfered Deep Frosted Obsidian Glass Body
-        guiGraphics.fill(x + 2, y, x + width - 2, y + height, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
-        guiGraphics.fill(x, y + 2, x + 2, y + height - 2, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
-        guiGraphics.fill(x + width - 2, y + 2, x + width, y + height - 2, applyAlpha(0xEB0D0D14, effectiveBgAlpha));
-
-        // 3. Delicate Golden Specular Highlight Top Edge
-        guiGraphics.fillGradient(x + 4, y, x + width - 4, y + 1,
-                applyAlpha(0xCCFFD700, effectiveBorderAlpha),
-                applyAlpha(0x66FFF59D, effectiveBorderAlpha));
-
-        // 4. Subtle Ambient Borders
-        int softBorderColor = applyAlpha(0x35FFD700, effectiveBorderAlpha);
-        guiGraphics.fill(x + 2, y + height - 1, x + width - 2, y + height, softBorderColor);
-        guiGraphics.fill(x, y + 2, x + 1, y + height - 2, softBorderColor);
-        guiGraphics.fill(x + width - 1, y + 2, x + width, y + height - 2, softBorderColor);
-
-        // Corner connector pixels for smooth rounded feeling
-        int cornerColor = applyAlpha(0x22FFD700, effectiveBorderAlpha);
-        guiGraphics.fill(x + 1, y + 1, x + 2, y + 2, cornerColor);
-        guiGraphics.fill(x + width - 2, y + 1, x + width - 1, y + 2, cornerColor);
-        guiGraphics.fill(x + 1, y + height - 2, x + 2, y + height - 1, cornerColor);
-        guiGraphics.fill(x + width - 2, y + height - 2, x + width - 1, y + height - 1, cornerColor);
+        // 2. Background tint
+        float opacity = config.getHudOpacity();
+        if (opacity > 0.05f) {
+            int softTint = applyAlpha(0x18000000, opacity * effectiveAlpha);
+            guiGraphics.fill(x - 2, y - 2, x + width + 2, y + height + 2, softTint);
+        }
     }
 
     private static void renderModernAlbumArt(GuiGraphics guiGraphics, String url, int x, int y, int size, float alpha) {
         Identifier texture = AlbumArtManager.getInstance().getAlbumTexture(url);
 
-        // Art frame with smooth chamfered border
-        guiGraphics.fill(x + 1, y, x + size - 1, y + size, applyAlpha(0xFF14141E, alpha));
-        guiGraphics.fill(x, y + 1, x + 1, y + size - 1, applyAlpha(0xFF14141E, alpha));
-        guiGraphics.fill(x + size - 1, y + 1, x + size, y + size - 1, applyAlpha(0xFF14141E, alpha));
-
-        // Delicate gold border ring
-        guiGraphics.fill(x + 1, y, x + size - 1, y + 1, applyAlpha(0x66FFD700, alpha));
-        guiGraphics.fill(x + 1, y + size - 1, x + size - 1, y + size, applyAlpha(0x44FFD700, alpha));
-        guiGraphics.fill(x, y + 1, x + 1, y + size - 1, applyAlpha(0x44FFD700, alpha));
-        guiGraphics.fill(x + size - 1, y + 1, x + size, y + size - 1, applyAlpha(0x44FFD700, alpha));
+        // Soft subtle drop shadow for depth against light in-game backgrounds
+        guiGraphics.fill(x + 1, y + 1, x + size + 1, y + size + 1, applyAlpha(0x40000000, alpha));
 
         if (texture != null) {
-            guiGraphics.blit(texture, x + 1, y + 1, x + size - 1, y + size - 1, 0.0f, 1.0f, 0.0f, 1.0f);
+            guiGraphics.blit(texture, x, y, x + size, y + size, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
+            guiGraphics.fill(x, y, x + size, y + size, applyAlpha(0x22FFFFFF, alpha));
             Font font = Minecraft.getInstance().font;
-            guiGraphics.drawCenteredString(font, "♫", x + (size / 2), y + (size / 2) - 4, applyAlpha(0xFFFFD700, alpha));
+            guiGraphics.drawCenteredString(font, "*", x + (size / 2), y + (size / 2) - 4, applyAlpha(0xFFFFFFFF, alpha));
         }
     }
 
@@ -554,5 +528,110 @@ public class SpotifyHudRenderer {
         int a = (argb >> 24) & 0xFF;
         int newA = Math.max(0, Math.min(255, (int) (a * Math.max(0f, Math.min(1f, alpha)))));
         return (newA << 24) | (argb & 0x00FFFFFF);
+    }
+
+    public static int getCardWidth() {
+        return 228;
+    }
+
+    public static int getCardHeight(ModConfig config) {
+        return config.isHudCompact() ? 44 : 54;
+    }
+
+    public static void renderHudPreview(GuiGraphics guiGraphics, int screenX, int screenY, float scale, float alpha) {
+        ModConfig config = ModConfig.getInstance();
+        SpotifyStateManager stateManager = SpotifyStateManager.getInstance();
+        PlaybackState state = stateManager.getCurrentState();
+        if (state == null || state.getTrackName().isEmpty()) {
+            state = new PlaybackState("preview", "Starboy", "The Weeknd, Daft Punk", "Starboy", "", 230000L, 75000L, true, false, "off", 80, "Spotify Desktop", "Computer");
+        }
+
+        Font font = Minecraft.getInstance().font;
+        int cardWidth = getCardWidth();
+        int cardHeight = getCardHeight(config);
+        int dynamicTotalHeight = cardHeight + (config.isHudShowLyrics() && !config.isHudCompact() ? 17 : 0);
+
+        guiGraphics.pose().pushMatrix();
+        guiGraphics.pose().translate((float) screenX, (float) screenY);
+        if (scale != 1.0f) {
+            guiGraphics.pose().scale(scale, scale);
+        }
+        int x = 0;
+        int y = 0;
+
+        renderModernCard(guiGraphics, x, y, cardWidth, dynamicTotalHeight, alpha);
+
+        int artSize = config.isHudCompact() ? 32 : 38;
+        int artX = x + 8;
+        int artY = y + 8;
+        renderModernAlbumArt(guiGraphics, state.getAlbumArtUrl(), artX, artY, artSize, alpha);
+
+        int textX = artX + artSize + 8;
+        int maxTextWidth = cardWidth - (textX - x) - 10;
+
+        String trackTitle = state.getTrackName();
+        int titleY = y + 8;
+        int accentColor = config.isSyncHudTheme() ? ThemeManager.getAccent() : 0xFFFFD700;
+        int accent2Color = config.isSyncHudTheme() ? ThemeManager.getAccent2() : 0xFFFFF066;
+
+        boolean isLiked = stateManager.isCurrentTrackLiked();
+        if (isLiked) {
+            guiGraphics.drawString(font, "+", x + cardWidth - 44, titleY, applyAlpha(accentColor, alpha), true);
+        }
+        AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, x + cardWidth - 32, titleY + 9, 24, 9, 6,
+                true, state.getProgressMs(), alpha, accentColor, accent2Color,
+                state.getTrackName(), state.getArtistNames(), false);
+
+        int rightOffset = isLiked ? 46 : 34;
+        guiGraphics.enableScissor(textX, titleY - 1, textX + maxTextWidth - rightOffset, titleY + 10);
+        guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, alpha), true);
+        guiGraphics.disableScissor();
+
+        int artistY = titleY + 11;
+        String artist = state.getArtistNames();
+        if (font.width(artist) > maxTextWidth) {
+            while (font.width(artist + "...") > maxTextWidth && artist.length() > 3) {
+                artist = artist.substring(0, artist.length() - 1);
+            }
+            artist = artist + "...";
+        }
+        guiGraphics.drawString(font, artist, textX, artistY, applyAlpha(accent2Color, alpha), true);
+
+        long progressMs = state.getProgressMs();
+        long durationMs = state.getDurationMs();
+        float progressRatio = durationMs > 0 ? Math.min(1.0f, (float) progressMs / durationMs) : 0.35f;
+
+        int barX = textX;
+        int barY = artistY + 13;
+        int barWidth = maxTextWidth;
+        int barHeight = 3;
+
+        guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, applyAlpha(0x44FFFFFF, alpha));
+        int filledWidth = (int) (barWidth * progressRatio);
+        if (filledWidth > 0) {
+            guiGraphics.fillGradient(barX, barY, barX + filledWidth, barY + barHeight, applyAlpha(accentColor, alpha), applyAlpha(accent2Color, alpha));
+            int capX = barX + filledWidth;
+            guiGraphics.fill(capX - 1, barY - 1, capX + 2, barY + barHeight + 1, applyAlpha(0xFFFFFFFF, alpha));
+        }
+
+        if (!config.isHudCompact()) {
+            String timeText = PlaybackState.formatTime(progressMs) + " / " + PlaybackState.formatTime(durationMs);
+            guiGraphics.pose().pushMatrix();
+            guiGraphics.pose().scale(0.72f, 0.72f);
+            int timeX = (int) ((barX + barWidth) / 0.72f) - font.width(timeText);
+            int timeY = (int) ((barY + 5) / 0.72f);
+            guiGraphics.drawString(font, timeText, timeX, timeY, applyAlpha(0xFFAAAAAA, alpha), true);
+            guiGraphics.pose().popMatrix();
+        }
+
+        if (config.isHudShowLyrics() && !config.isHudCompact()) {
+            int dividerY = y + cardHeight - 2;
+            guiGraphics.fill(x + 8, dividerY, x + cardWidth - 8, dividerY + 1, applyAlpha(0x22FFFFFF, alpha));
+            int lyricY = dividerY + 4;
+            guiGraphics.drawString(font, "~", x + 8, lyricY, applyAlpha(accentColor, alpha), true);
+            guiGraphics.drawString(font, "Look what you've done... I'm a starboy", x + 18, lyricY, applyAlpha(0xFFFFFDE7, alpha), true);
+        }
+
+        guiGraphics.pose().popMatrix();
     }
 }

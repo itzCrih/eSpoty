@@ -77,18 +77,17 @@ public class ESpotyModClient implements ClientModInitializer {
                 CATEGORY_ESPOTY
         ));
 
-        // Register In-Game HUD & Celestial Sky Lyrics (Rendered in 3D world with depth occlusion)
+        // Register In-Game HUD & Sky Lyrics
         HudRenderCallback.EVENT.register(SpotifyHudRenderer::render);
         WorldRenderEvents.END_MAIN.register(it.itzcrih.espoty.gui.sky.SkyLyricsRenderer::render);
 
-        // Register Interactive Chat Playback Controls (Media buttons on HUD when Chat is open)
-        // Register Interactive Chat Playback Controls (Media buttons on HUD when Chat is open)
+        // Register Chat Playback Controls
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (screen instanceof ChatScreen) {
                 ScreenMouseEvents.allowMouseClick(screen).register((scr, event) -> {
                     if (event.button() == 0) {
                         if (SpotifyHudRenderer.handleChatMouseClick(event.x(), event.y())) {
-                            return false; // Handled by HUD playback buttons!
+                            return false;
                         }
                     }
                     return true;
@@ -96,13 +95,13 @@ public class ESpotyModClient implements ClientModInitializer {
             }
         });
 
-// Register Main Menu Mini Player
+        // Register Main Menu Mini Player
         it.itzcrih.espoty.gui.widget.MainMenuMiniPlayer.register();
 
-        // Asynchronous non-blocking GitHub release update check
+        // Check for updates
         it.itzcrih.espoty.update.UpdateChecker.getInstance().checkForUpdatesAsync();
 
-        // Asynchronous non-blocking diagnostic reporting
+        // Diagnostics service
         it.itzcrih.espoty.telemetry.TelemetryService.getInstance();
 
         // Register Client Tick (Key Handling & Audio Ducking)

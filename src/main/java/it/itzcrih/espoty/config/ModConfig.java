@@ -28,6 +28,7 @@ public class ModConfig {
         TOP_RIGHT("Top Right"),
         BOTTOM_LEFT("Bottom Left"),
         BOTTOM_RIGHT("Bottom Right"),
+        CUSTOM("Custom (Editor)"),
         OFF("Disabled");
 
         private final String displayName;
@@ -48,7 +49,7 @@ public class ModConfig {
 
     public enum SkyLyricsMode {
         FOLLOW_LOOK("Dynamic Gaze"),
-        NORTH_SOUTH("Fixed North & South");
+        NORTH_SOUTH("North & South");
 
         private final String displayName;
 
@@ -114,11 +115,13 @@ public class ModConfig {
     private float skyLyricsScale = 1.0f;
     private int skyLyricsLength = 5;
     private LyricFont lyricFont = LyricFont.MODERN;
-    private ThemeLook themeLook = ThemeLook.AURORA;
+    private ThemeLook themeLook = ThemeLook.BOREALIS;
     private ThemeAccent themeAccent = ThemeAccent.MATCH_THEME;
     private float glassOpacity = 0.90f;
     private boolean syncHudTheme = true;
     private float hudScale = 1.0f;
+    private int hudCustomX = -1;
+    private int hudCustomY = -1;
     private float hudOpacity = 0.85f;
     private String customClientId = "";
     private int volume = 80;
@@ -160,7 +163,7 @@ public class ModConfig {
                     if (config.anonymousInstallId == null || config.anonymousInstallId.isEmpty()) config.anonymousInstallId = UUID.randomUUID().toString();
                     if (config.lyricFont == null) config.lyricFont = LyricFont.MODERN;
                     if (config.skyLyricsMode == null) config.skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
-                    if (config.themeLook == null) config.themeLook = ThemeLook.AURORA;
+                    if (config.themeLook == null) config.themeLook = ThemeLook.BOREALIS;
                     if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
                     if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
                     return config;
@@ -331,6 +334,31 @@ public class ModConfig {
         setHudScale(Math.max(50, Math.min(150, percent)) / 100.0f);
     }
 
+    public int getHudCustomX() {
+        return hudCustomX;
+    }
+
+    public void setHudCustomX(int hudCustomX) {
+        this.hudCustomX = hudCustomX;
+        save();
+    }
+
+    public int getHudCustomY() {
+        return hudCustomY;
+    }
+
+    public void setHudCustomY(int hudCustomY) {
+        this.hudCustomY = hudCustomY;
+        save();
+    }
+
+    public void setHudCustomPosition(int x, int y) {
+        this.hudCustomX = x;
+        this.hudCustomY = y;
+        this.hudPosition = HudPosition.CUSTOM;
+        save();
+    }
+
     public float getHudOpacity() {
         return Math.max(0.0f, Math.min(1.0f, hudOpacity));
     }
@@ -416,11 +444,12 @@ public class ModConfig {
     }
 
     public ThemeLook getThemeLook() {
-        return themeLook != null ? themeLook : ThemeLook.AURORA;
+        return themeLook != null ? themeLook : ThemeLook.BOREALIS;
     }
 
     public void setThemeLook(ThemeLook themeLook) {
-        this.themeLook = themeLook != null ? themeLook : ThemeLook.AURORA;
+        this.themeLook = themeLook != null ? themeLook : ThemeLook.BOREALIS;
+        this.themeAccent = ThemeAccent.MATCH_THEME;
         save();
     }
 

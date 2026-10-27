@@ -13,7 +13,6 @@ public class SpotifyProcessDetector {
 
     /**
      * Checks if Spotify desktop application is currently running on the local PC.
-     * Uses Java 21 ProcessHandle for ultra-fast, zero-native overhead detection.
      */
     public static boolean isSpotifyRunning() {
         long now = System.currentTimeMillis();

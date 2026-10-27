@@ -52,49 +52,47 @@ public class MainMenuMiniPlayer {
         int accent = ModConfig.getInstance().isSyncHudTheme() ? ThemeManager.getAccent() : 0xFFFFD700;
         int accent2 = ModConfig.getInstance().isSyncHudTheme() ? ThemeManager.getAccent2() : 0xFFFFF066;
 
-        // 1. Multi-Layer Soft Drop Shadow
-        guiGraphics.fill(x + 1, y + 2, x + w - 1, y + h + 3, 0x35000000);
-        guiGraphics.fill(x + 2, y + 3, x + w - 2, y + h + 4, 0x20000000);
+        // 1. Horizontal gradient glow
+        int steps = 20;
+        int glowWidth = Math.min(w, 140);
+        float stepW = (float) glowWidth / (float) steps;
+        for (int i = 0; i < steps; i++) {
+            float t = (float) i / (float) steps;
+            float falloff = (1.0f - t) * (1.0f - t);
+            int glow = ThemeManager.applyAlpha(accent, falloff * 0.20f);
+            int gx1 = x + (int) (i * stepW);
+            int gx2 = x + (int) ((i + 1) * stepW);
+            guiGraphics.fill(gx1, y - 2, gx2, y + h + 2, glow);
+        }
 
-        // 2. Beveled/Chamfered Deep Obsidian Glass Box
-        int winBg = ModConfig.getInstance().isSyncHudTheme() ? ThemeManager.getWindowBg() : 0xEE0D0D14;
-        guiGraphics.fill(x + 2, y, x + w - 2, y + h, winBg);
-        guiGraphics.fill(x, y + 2, x + 2, y + h - 2, winBg);
-        guiGraphics.fill(x + w - 2, y + 2, x + w, y + h - 2, winBg);
-
-        // Top specular line
-        guiGraphics.fillGradient(x + 3, y, x + w - 3, y + 1, cardHover ? accent2 : accent, 0x33FFFFFF);
-
-        // Soft subtle borders
-        int borderColor = cardHover ? ThemeManager.applyAlpha(accent, 0.50f) : ThemeManager.applyAlpha(accent, 0.25f);
-        guiGraphics.fill(x + 2, y + h - 1, x + w - 2, y + h, borderColor);
-        guiGraphics.fill(x, y + 2, x + 1, y + h - 2, borderColor);
-        guiGraphics.fill(x + w - 1, y + 2, x + w, y + h - 2, borderColor);
+        // Subtle hover indicator
+        if (cardHover) {
+            guiGraphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0x12FFFFFF);
+        }
 
         if (!stateManager.isSpotifyRunning() || state == null || state.getTrackName().isEmpty()) {
             // Idle / Offline State
-            guiGraphics.drawCenteredString(font, "♫ eSpoty: " + (stateManager.isSpotifyRunning() ? "Paused" : "Offline"), x + (w / 2), y + 12, accent);
+            guiGraphics.drawCenteredString(font, "eSpoty: " + (stateManager.isSpotifyRunning() ? "Paused" : "Offline"), x + (w / 2), y + 12, 0xFFFFFFFF);
             guiGraphics.drawCenteredString(font, "Click to open GUI (Key: K)", x + (w / 2), y + 26, 0xFFAAAAAA);
             return;
         }
 
-        // 3. Mini Album Art (30x30) with smooth frame
+        // 2. Mini Album Art
         int artSize = 30;
-        int artX = x + 7;
+        int artX = x + 6;
         int artY = y + 8;
         Identifier texture = AlbumArtManager.getInstance().getAlbumTexture(state.getAlbumArtUrl());
 
-        guiGraphics.fill(artX + 1, artY, artX + artSize - 1, artY + artSize, 0xFF14141E);
-        guiGraphics.fill(artX, artY + 1, artX + artSize, artY + artSize - 1, 0xFF14141E);
-        guiGraphics.fill(artX + 1, artY, artX + artSize - 1, artY + 1, ThemeManager.applyAlpha(accent, 0.55f));
+        guiGraphics.fill(artX + 1, artY + 1, artX + artSize + 1, artY + artSize + 1, 0x40000000);
 
         if (texture != null) {
-            guiGraphics.blit(texture, artX + 1, artY + 1, artX + artSize - 1, artY + artSize - 1, 0.0f, 1.0f, 0.0f, 1.0f);
+            guiGraphics.blit(texture, artX, artY, artX + artSize, artY + artSize, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
-            guiGraphics.drawCenteredString(font, "♫", artX + (artSize / 2), artY + (artSize / 2) - 4, accent);
+            guiGraphics.fill(artX, artY, artX + artSize, artY + artSize, 0x22FFFFFF);
+            guiGraphics.drawCenteredString(font, "*", artX + (artSize / 2), artY + (artSize / 2) - 4, 0xFFFFFFFF);
         }
 
-        // 4. Track Metadata with caching
+        // 3. Track Metadata with caching
         int textX = artX + artSize + 7;
         int maxTextW = 86;
 
@@ -103,16 +101,16 @@ public class MainMenuMiniPlayer {
             cachedRawTrack = rawTrack;
             cachedTrimmedTrack = trimWithEllipsis(font, rawTrack, maxTextW);
         }
-        guiGraphics.drawString(font, cachedTrimmedTrack, textX, y + 6, accent, true);
+        guiGraphics.drawString(font, cachedTrimmedTrack, textX, y + 6, 0xFFFFFFFF, true);
 
         String rawArtist = state.getArtistNames();
         if (!rawArtist.equals(cachedRawArtist)) {
             cachedRawArtist = rawArtist;
             cachedTrimmedArtist = trimWithEllipsis(font, rawArtist, maxTextW);
         }
-        guiGraphics.drawString(font, cachedTrimmedArtist, textX, y + 17, accent2, true);
+        guiGraphics.drawString(font, cachedTrimmedArtist, textX, y + 17, 0xFFCBD5E1, true);
 
-        // 5. Mini Interactive Controls Row
+        // 4. Mini Interactive Controls Row
         int btnY = y + 29;
         int btnW = 14;
         int btnH = 12;
@@ -120,32 +118,32 @@ public class MainMenuMiniPlayer {
         // Prev Button
         int prevX = textX;
         boolean prevHover = mouseX >= prevX - 2 && mouseX <= prevX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
-        if (prevHover) guiGraphics.fill(prevX - 1, btnY - 1, prevX + btnW + 1, btnY + btnH + 1, ThemeManager.applyAlpha(accent, 0.25f));
-        guiGraphics.drawString(font, "⏮", prevX, btnY, prevHover ? accent2 : 0xFFCCCCCC, false);
+        if (prevHover) guiGraphics.fill(prevX - 1, btnY - 1, prevX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
+        guiGraphics.drawString(font, "<<", prevX, btnY, prevHover ? accent : 0xFFCCCCCC, true);
 
         // Play / Pause Button
         int playX = prevX + 17;
         boolean playHover = mouseX >= playX - 2 && mouseX <= playX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
-        if (playHover) guiGraphics.fill(playX - 1, btnY - 1, playX + btnW + 1, btnY + btnH + 1, ThemeManager.applyAlpha(accent, 0.35f));
-        String playIcon = state.isPlaying() ? "❚❚" : "▶";
-        guiGraphics.drawString(font, playIcon, playX, btnY, playHover ? accent2 : accent, false);
+        if (playHover) guiGraphics.fill(playX - 1, btnY - 1, playX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
+        String playIcon = state.isPlaying() ? "||" : ">";
+        guiGraphics.drawString(font, playIcon, playX, btnY, playHover ? accent : 0xFFFFFFFF, true);
 
         // Next Button
         int nextX = playX + 17;
         boolean nextHover = mouseX >= nextX - 2 && mouseX <= nextX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
-        if (nextHover) guiGraphics.fill(nextX - 1, btnY - 1, nextX + btnW + 1, btnY + btnH + 1, ThemeManager.applyAlpha(accent, 0.25f));
-        guiGraphics.drawString(font, "⏭", nextX, btnY, nextHover ? accent2 : 0xFFCCCCCC, false);
+        if (nextHover) guiGraphics.fill(nextX - 1, btnY - 1, nextX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
+        guiGraphics.drawString(font, ">>", nextX, btnY, nextHover ? accent : 0xFFCCCCCC, true);
 
         // Like Button (Heart)
         int likeX = nextX + 18;
         boolean likeHover = mouseX >= likeX - 2 && mouseX <= likeX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
-        if (likeHover) guiGraphics.fill(likeX - 1, btnY - 1, likeX + btnW + 1, btnY + btnH + 1, ThemeManager.applyAlpha(accent, 0.25f));
+        if (likeHover) guiGraphics.fill(likeX - 1, btnY - 1, likeX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
         boolean isLiked = stateManager.isCurrentTrackLiked();
-        String heartIcon = isLiked ? "❤" : "♡";
-        int heartColor = isLiked ? accent : (likeHover ? accent2 : 0xFF888899);
-        guiGraphics.drawString(font, heartIcon, likeX, btnY, heartColor, false);
+        String heartIcon = isLiked ? "[+]" : "[-]";
+        int heartColor = isLiked ? 0xFFFF4444 : (likeHover ? accent : 0xFFAAAAAA);
+        guiGraphics.drawString(font, heartIcon, likeX, btnY, heartColor, true);
 
-        // 6. Cute Mini Waveform on Right Side (Song-synchronized)
+        // Mini Waveform
         int waveX = x + w - 38;
         int waveY = y + 39;
         long progressMs = stateManager.getInterpolatedProgressMs();

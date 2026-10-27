@@ -1,6 +1,6 @@
-# eSpoty - Spotify Integration for Minecraft (Fabric 1.21.x - 1.21.11)
+# eSpoty - Spotify Integration for Minecraft (Fabric Multi-Version)
 
-A high-performance, modern Spotify integration mod for Fabric 1.21 through 1.21.11. Features a liquid glassmorphic theme engine, real-time synchronized karaoke lyrics, 3D celestial sky lyrics with dynamic gaze tracking, full playback controls, queue management, chat-accessible HUD controls, audio ducking, and automatic local PC Spotify desktop process detection.
+A high-performance, modern Spotify integration mod for Fabric. Features a liquid glassmorphic theme engine, interactive in-game HUD drag-and-drop editor with corner scaling, real-time synchronized karaoke lyrics, 3D celestial sky lyrics with dynamic gaze tracking, full playback controls, queue management, chat-accessible HUD controls, audio ducking, and automatic local PC Spotify desktop process detection.
 
 ---
 
@@ -9,10 +9,17 @@ A high-performance, modern Spotify integration mod for Fabric 1.21 through 1.21.
 - Direct Local PC Link (Zero Login Required):
   - Automatically connects to your running Spotify desktop app on Windows via Windows Media SMTC and a local loopback bridge.
   - Zero developer account setup, zero client IDs or secrets, and zero browser login required.
+  - Controls Spotify application audio session directly without modifying Windows master output volume.
   - Optional Spotify Web API PKCE login for extended remote control features.
 
+- Interactive In-Game HUD Drag & Drop Editor:
+  - Live HUD positioning: drag the music card anywhere on your screen.
+  - Corner resize handles: scale your HUD smoothly from 50% to 150%.
+  - Magnetic guidelines: automatic snapping to screen edges and center axes.
+  - Live preview with real-time waveform and song metadata simulation.
+
 - Glassmorphic Theme Engine:
-  - Aurora aesthetic with six curated presets: Aurora (Neon Mint & Deep Space), Midnight (Obsidian & Royal Violet), OLED Black (Pitch Black & Emerald), Daylight (Frosted Slate & Azure), Sunset (Velvet Dusk & Coral Rose), and Cyber Gold (Titanium & Radiant Gold).
+  - Six curated presets: Borealis (Neon Mint & Deep Space), Midnight (Obsidian & Royal Violet), OLED Black (Pitch Black & Emerald), Daylight (Frosted Slate & Azure), Sunset (Velvet Dusk & Coral Rose), and Cyber Gold (Titanium & Radiant Gold).
   - Custom accent overrides (Mint Cyan, Spotify Green, Royal Violet, Electric Blue, Sunset Orange, Coral Rose, Cyber Gold, Ice White).
   - Adjustable glass opacity slider and optional theme synchronization across HUD, mini player, and sky lyrics.
 
@@ -21,16 +28,17 @@ A high-performance, modern Spotify integration mod for Fabric 1.21 through 1.21.
   - Pre-computed harmonic frequency curves for high render efficiency and zero FPS drop.
 
 - Interactive In-Game Control Hub (Screen):
-  - Now Playing: High-resolution album artwork, track title, artists, album, and favorites heart button.
+  - Now Playing: High-resolution album artwork, track title, artists, album, and favorites button.
   - Full Playback Controls: Play, Pause, Next Track, Previous Track, Shuffle toggle, and Repeat cycle (Off / All / One).
+  - Queue Management: View upcoming tracks, reorder items, skip to any track in queue, or remove entries.
   - Dynamic State Handling: Control buttons automatically adapt and dim if playback actions are restricted by Spotify.
   - Interactive Seek Bar: Click or drag the progress scrubber to jump to any timestamp in the track.
-  - Master Volume Slider: Real-time volume scrubber (0% - 100%) with instant responsiveness.
+  - Application Volume Slider: Real-time volume scrubber (0% - 100%) targeting Spotify exclusively.
   - Dedicated Themes Tab: Live preview cards and color swatch discs for immediate visual selection.
 
 - Liked Songs (Favorites):
   - Favorite any track with a single click using the Heart button.
-  - Liked tracks display a heart indicator both in the Hub and directly on the in-game HUD and main menu player.
+  - Liked tracks display an indicator both in the Hub and directly on the in-game HUD and main menu player.
 
 - Real-Time Synchronized Lyrics:
   - Live karaoke-style synchronized lyrics powered by the LRCLib database.
@@ -49,7 +57,7 @@ A high-performance, modern Spotify integration mod for Fabric 1.21 through 1.21.
 - Modern In-Game HUD & Chat Playback Controls:
   - Glassmorphic card displaying current track, artist, album art, progress bar, and synced mini waveform.
   - Interactive chat controls dock: smoothly slides into view when opening Minecraft chat, allowing one-click track skips, pause, and liking without leaving the game.
-  - Configurable screen positions (Top Left, Top Right, Bottom Left, Bottom Right, or Off), opacity, and scale.
+  - Configurable screen positions (Top Left, Top Right, Bottom Left, Bottom Right, Off, or Custom via HUD Editor), opacity, and scale.
 
 - Main Menu Mini Player:
   - Elegant mini player widget on the Minecraft title screen with album art, metadata, controls, and waveform visualizer.
@@ -94,7 +102,7 @@ All keybindings can be customized in the Minecraft Options -> Controls -> Key Bi
 
 ## Getting Started
 
-1. Place the compiled `espoty-2.0.0.jar` into your Minecraft `.minecraft/mods` folder.
+1. Place the compiled `espoty-3.0.0.jar` (or version-specific jar) into your Minecraft `.minecraft/mods` folder.
 2. Start your Spotify desktop application on your PC.
 3. Launch Minecraft with Fabric Loader.
 4. Press `K` (or type `/espoty`) to open the Hub. eSpoty connects automatically to your local Spotify app.
@@ -106,7 +114,6 @@ All keybindings can be customized in the Minecraft Options -> Controls -> Key Bi
 Requirements:
 - Java 21 LTS or higher
 - Fabric Loader 0.16.0 or higher
-- Minecraft 1.21.1 / 1.21.x / 1.21.11
 
 ```bash
 # Clone the repository
@@ -117,7 +124,7 @@ cd eSpoty
 ./gradlew build
 ```
 
-The compiled mod jar will be located in `build/libs/espoty-2.0.0.jar`.
+The compiled mod jar will be located in `build/libs/espoty-3.0.0.jar`.
 
 ---
 

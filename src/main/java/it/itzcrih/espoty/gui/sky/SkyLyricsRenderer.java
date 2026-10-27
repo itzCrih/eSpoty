@@ -22,30 +22,15 @@ import org.joml.Vector3fc;
 import java.util.List;
 
 /**
- * Ultra-high-performance celestial lyrics renderer positioned dynamically in the player's horizontal gaze direction.
- * - Anchored in world space in the celestial dome, elevated majestically into the sky.
- * - Dynamically tracks the horizontal direction the player is looking, smoothly gliding across the sky dome with fluid inertia.
- * - Pure white luminescence (0xFFFFFFFF core) with zero texture-pack color override and zero color bleed.
- * - Frame-rate-independent 60+ FPS delta-time exponential smoothing and synchronized cubic/quintic Spotify ease-out.
- * - Emissive fullbright packed light (0x00F000F0) and deep drop shadows ensure crystal-clear visibility
- *   at all times of day (noon, sunset, midnight) and under TimeChanger or custom skybox mods (FabricSkyBoxes).
- * - Full compatibility with Iris/Sodium shaders and custom render pipelines using Font.DisplayMode.NORMAL and context.consumers().
- * - Frustum dot-product culling skips rendering when player looks down or away (zero allocation).
- * - Strict depth-tested occlusion guarantees terrain and buildings naturally block the sky lyrics.
+ * Celestial sky lyrics renderer.
  */
 public class SkyLyricsRenderer {
 
-    // Pure white color constant - guarantees texture packs and formatting codes cannot tint the text
     private static final TextColor PURE_WHITE = TextColor.fromRgb(0xFFFFFF);
-
-    // Spotify transition duration for silky-smooth line changes
     private static final float TRANSITION_DURATION_MS = 400.0f;
-
-    // Dedicated isolated buffer source: ensures zero interference with Minecraft's bufferSource or item/hand rendering
     private static final ByteBufferBuilder BYTE_BUFFER_BUILDER = new ByteBufferBuilder(256 * 1024);
     private static final MultiBufferSource.BufferSource DEDICATED_BUFFER_SOURCE = MultiBufferSource.immediate(BYTE_BUFFER_BUILDER);
 
-    // Dynamic celestial dome positioning cached per render distance change (zero allocation render loop)
     private static int lastRenderDistance = -1;
     private static float cachedDistance = 85.0f;
     private static float cachedElevation = 32.0f;
@@ -67,7 +52,7 @@ public class SkyLyricsRenderer {
     private static int currentActiveIdx = -1;
     private static int previousActiveIdx = -1;
 
-    // Zero-allocation cache structures
+    // Cache structures
     private enum LyricsType { SYNCED, PLAIN, INSTRUMENTAL }
 
     private static class CachedLine {
@@ -146,7 +131,7 @@ public class SkyLyricsRenderer {
             renderSouth = dotSouth > -0.20f;
             if (!renderNorth && !renderSouth) return;
         } else {
-            // Fluid gaze tracking: smoothly interpolates celestial azimuth towards camera horizontal yaw
+            // Gaze tracking
             float targetYaw = camera.yRot();
             if (Float.isNaN(smoothYaw)) {
                 smoothYaw = targetYaw;
@@ -155,27 +140,26 @@ public class SkyLyricsRenderer {
                 if (Math.abs(diff) < 0.04f) {
                     smoothYaw = targetYaw;
                 } else {
-                    // Responsive and silky damping (speed = 14.0f settles >95% within 200ms)
                     float followFactor = 1.0f - (float) Math.exp(-dt * 14.0f);
                     smoothYaw += diff * followFactor;
                     smoothYaw = normalizeAngleDeg(smoothYaw);
                 }
             }
 
-            // Compute celestial coordinates in world space along smooth gaze vector
+            // Compute celestial coordinates
             float rad = (float) Math.toRadians(smoothYaw);
             posX = -(float) Math.sin(rad) * cachedDistance;
             posZ = (float) Math.cos(rad) * cachedDistance;
             angleYRad = (float) (Math.PI - rad);
 
-            // Frustum / dot-product culling: verify monument is inside front field-of-view
+            // Frustum culling
             float invLen = 1.0f / (float) Math.sqrt(posX * posX + posY * posY + posZ * posZ);
             float dirX = posX * invLen;
             float dirY = posY * invLen;
             float dirZ = posZ * invLen;
 
             float dot = fwd.x() * dirX + fwd.y() * dirY + fwd.z() * dirZ;
-            if (dot < -0.15f) return; // Player looking straight down at the ground or away
+            if (dot < -0.15f) return;
         }
 
         PoseStack poseStack = context.matrices();
@@ -184,7 +168,7 @@ public class SkyLyricsRenderer {
         Font font = mc.font;
         if (font == null) return;
 
-        // Check if track, lyrics, or font changed to rebuild zero-allocation cache
+        // Rebuild cache if track or font changed
         String trackName = state.getTrackName();
         String artistNames = state.getArtistNames();
         LyricsManager lyricsMgr = LyricsManager.getInstance();
@@ -247,7 +231,7 @@ public class SkyLyricsRenderer {
             animStartTime = now - 10000L;
         }
 
-        // Fluid cubic ease-out synchronized scroll (optimized inline polynomial, 0 FPS drop)
+        // Synchronized scroll
         float elapsed = (animStartTime > 0) ? (float) (now - animStartTime) : 10000.0f;
         float animT = Math.max(0.0f, Math.min(1.0f, elapsed / TRANSITION_DURATION_MS));
         float invT = 1.0f - animT;
@@ -291,7 +275,7 @@ public class SkyLyricsRenderer {
             poseStack.popPose();
         }
 
-        // Flush our dedicated text buffer source cleanly - leaves game bufferSource completely untouched!
+        // Flush text buffer
         DEDICATED_BUFFER_SOURCE.endBatch();
     }
 
@@ -317,7 +301,7 @@ public class SkyLyricsRenderer {
 
                 float relY = (float) (i * lineSpacing - smoothScrollY);
 
-                // Synchronized activation weight for seamless Spotify scale and alpha morph
+                // Activation weight
                 float activeWeight = 0.0f;
                 if (i == activeIdx) {
                     activeWeight = ease;
@@ -400,7 +384,7 @@ public class SkyLyricsRenderer {
             PoseStack poseStack,
             MultiBufferSource bufferSource
     ) {
-        // 1. Drop shadow with physical Z-separation (-0.04f)
+        // 1. Drop shadow
         if ((shadowColor & 0xFF000000) != 0) {
             poseStack.pushPose();
             poseStack.translate(0.0f, 0.0f, -0.04f);
@@ -410,9 +394,7 @@ public class SkyLyricsRenderer {
             poseStack.popPose();
         }
 
-        // 2. Radiant core pure white text on Z = +0.04f with Font.DisplayMode.NORMAL
-        // Full packed light 0x00F000F0 guarantees luminous celestial glow at any time of day
-        // NORMAL display mode guarantees 100% compatibility with all shader packs (Iris/Sodium/Canvas/Vanilla)
+        // 2. Core text
         if ((coreColor & 0xFF000000) != 0) {
             poseStack.pushPose();
             poseStack.translate(0.0f, 0.0f, 0.04f);

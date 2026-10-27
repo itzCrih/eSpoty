@@ -3,14 +3,13 @@ package it.itzcrih.espoty.gui.theme;
 import it.itzcrih.espoty.config.ModConfig;
 
 /**
- * Modern Glassmorphic Theme Engine inspired by the Aurora Client aesthetic.
- * Manages theme presets (Looks), accent color palettes, glass opacity, and real-time color styling.
- * Highly optimized with cached color evaluations to guarantee 0 FPS drop and 0 memory allocation.
+ * Modern Theme Engine for eSpoty.
+ * Manages theme presets, accent color palettes, and glass styling.
  */
 public class ThemeManager {
 
     public enum ThemeLook {
-        AURORA("Aurora", "Neon Mint & Liquid Deep Space", 0x0B0F19, 0x111625, 0x161F33, 0x202B44, 0xFF00FFA3, 0xFF05F29A, 0x2800FFA3, 0x1800FFA3, 0xFFFFFFFF, 0xFF94A3B8, 0xFF64748B),
+        BOREALIS("Borealis", "Neon Mint & Deep Space", 0x0B0F19, 0x111625, 0x161F33, 0x202B44, 0xFF00FFA3, 0xFF05F29A, 0x2800FFA3, 0x1800FFA3, 0xFFFFFFFF, 0xFF94A3B8, 0xFF64748B),
         MIDNIGHT("Midnight", "Obsidian & Royal Violet Glass", 0x0D0B18, 0x131024, 0x1A1530, 0x241D42, 0xFFA855F7, 0xFFC084FC, 0x28A855F7, 0x18A855F7, 0xFFFFFFFF, 0xFFA78BFA, 0xFF7C3AED),
         OLED("OLED Black", "Pure Pitch Black & Lime Emerald", 0x000000, 0x080808, 0x121212, 0x1C1C1C, 0xFF22C55E, 0xFF16A34A, 0x20FFFFFF, 0x12FFFFFF, 0xFFFFFFFF, 0xFFA1A1AA, 0xFF52525B),
         DAYLIGHT("Daylight", "Frosted Slate & Azure Sky", 0x1E293B, 0x0F172A, 0x26354D, 0x334460, 0xFF38BDF8, 0xFF0EA5E9, 0x3038BDF8, 0x2038BDF8, 0xFFF8FAFC, 0xFFCBD5E1, 0xFF94A3B8),
@@ -66,7 +65,7 @@ public class ThemeManager {
 
     public enum ThemeAccent {
         MATCH_THEME("Default", 0, 0),
-        AURORA_CYAN("Mint Cyan", 0xFF00FFA3, 0xFF05F29A),
+        MINT_CYAN("Mint Cyan", 0xFF00FFA3, 0xFF05F29A),
         SPOTIFY_GREEN("Spotify Green", 0xFF1DB954, 0xFF22C55E),
         ROYAL_PURPLE("Royal Violet", 0xFFA855F7, 0xFFC084FC),
         ELECTRIC_BLUE("Electric Blue", 0xFF38BDF8, 0xFF0284C7),
@@ -90,7 +89,7 @@ public class ThemeManager {
         public int getColor2() { return color2; }
     }
 
-    // High performance color cache
+    // Cached theme colors
     private static ThemeLook cachedLook;
     private static ThemeAccent cachedAccentSetting;
     private static float cachedOpacity = -1f;
@@ -110,7 +109,7 @@ public class ThemeManager {
     private static void updateCacheIfNeeded() {
         ModConfig config = ModConfig.getInstance();
         ThemeLook look = config.getThemeLook();
-        if (look == null) look = ThemeLook.AURORA;
+        if (look == null) look = ThemeLook.BOREALIS;
         ThemeAccent accent = config.getThemeAccent();
         if (accent == null) accent = ThemeAccent.MATCH_THEME;
         float opacity = config.getGlassOpacity();
@@ -141,6 +140,13 @@ public class ThemeManager {
             cachedTextSecondary = look.getTextSecondary();
             cachedTextMuted = look.getTextMuted();
         }
+    }
+
+    public static void invalidateCache() {
+        cachedLook = null;
+        cachedAccentSetting = null;
+        cachedOpacity = -1f;
+        updateCacheIfNeeded();
     }
 
     public static ThemeLook getLook() {

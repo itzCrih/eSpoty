@@ -59,7 +59,7 @@ public class WindowsMediaBridge {
                 return;
             }
 
-            // Create localhost socket server for rock-solid bi-directional communication
+            // Create localhost socket server
             serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
             int port = serverSocket.getLocalPort();
             serverSocket.setSoTimeout(12000);
@@ -108,7 +108,13 @@ public class WindowsMediaBridge {
                     try {
                         JsonObject json = GSON.fromJson(line, JsonObject.class);
                         if (json != null) {
-                            handleStateJson(json);
+                            if (json.has("type") && "queue".equals(json.get("type").getAsString())) {
+                                if (json.has("data") && json.get("data").isJsonObject()) {
+                                    SpotifyStateManager.getInstance().updateQueueFromJson(json.getAsJsonObject("data"));
+                                }
+                            } else {
+                                handleStateJson(json);
+                            }
                         }
                     } catch (Exception ignored) {}
                 }
@@ -124,7 +130,7 @@ public class WindowsMediaBridge {
 
     private void handleStateJson(JsonObject json) {
         boolean running = json.has("running") && json.get("running").getAsBoolean();
-        int vol = json.has("vol") ? json.get("vol").getAsInt() : 100;
+        int vol = json.has("vol") ? json.get("vol").getAsInt() : -1;
 
         if (!running) {
             SpotifyStateManager.getInstance().updateLocalState(false, "", "", "", 0, 0, false, false, "none", vol, "", false, true, true, true, true, true, true);

@@ -3,9 +3,10 @@ param([int]$Port = 0)
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# CoreAudio Native Audio Master Controller with correct MMDeviceEnumerator CLSID
+# CoreAudio Native Audio Controller for Spotify process volume (never touches Windows master endpoint)
 Add-Type -TypeDefinition @"
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 [ComImport]
@@ -26,18 +27,71 @@ internal interface IMMDevice {
 }
 
 [ComImport]
-[Guid("5CDF2C82-841E-4546-9722-0CF74078229A")]
+[Guid("77AA99A0-1BD6-484F-BC0A-70C5D217D568")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public interface IAudioEndpointVolume {
+internal interface IAudioSessionManager2 {
     int NotImpl1();
     int NotImpl2();
-    int GetChannelCount(out int pnChannelCount);
-    int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);
-    int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
-    int GetMasterVolumeLevel(out float pfLevelDB);
     [PreserveSig]
-    int GetMasterVolumeLevelScalar(out float pfLevel);
-    int SetMute(bool bMute, ref Guid pguidEventContext);
+    int GetSessionEnumerator(out IAudioSessionEnumerator SessionEnum);
+}
+
+[ComImport]
+[Guid("E2F560DC-CC84-4366-9EC8-0D7791C6E1C3")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionEnumerator {
+    [PreserveSig]
+    int GetCount(out int SessionCount);
+    [PreserveSig]
+    int GetSession(int SessionIndex, out IAudioSessionControl Session);
+}
+
+[ComImport]
+[Guid("F4B41553-E727-4FA0-BD20-FB40F5F1A6F0")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionControl {
+    int NotImpl1();
+    int NotImpl2();
+    int NotImpl3();
+    int NotImpl4();
+    int NotImpl5();
+    int NotImpl6();
+    int NotImpl7();
+}
+
+[ComImport]
+[Guid("BFB7FF88-7239-4FC9-8FA2-00F950E2531C")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionControl2 {
+    int NotImpl1();
+    int NotImpl2();
+    int NotImpl3();
+    int NotImpl4();
+    int NotImpl5();
+    int NotImpl6();
+    int NotImpl7();
+    [PreserveSig]
+    int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+    [PreserveSig]
+    int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+    [PreserveSig]
+    int GetProcessId(out int pRetVal);
+    [PreserveSig]
+    int IsSystemSoundsSession();
+    [PreserveSig]
+    int SetDuckingPreference(bool optOut);
+}
+
+[ComImport]
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ISimpleAudioVolume {
+    [PreserveSig]
+    int SetMasterVolume(float fLevel, ref Guid EventContext);
+    [PreserveSig]
+    int GetMasterVolume(out float pfLevel);
+    [PreserveSig]
+    int SetMute(bool bMute, ref Guid EventContext);
     [PreserveSig]
     int GetMute(out bool pbMute);
 }
@@ -46,46 +100,92 @@ public interface IAudioEndpointVolume {
 [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
 internal class MMDeviceEnumerator {}
 
-public class AudioMasterReal {
+public class SpotifyAppVolume {
+    private static bool IsSpotifySession(IAudioSessionControl2 ctl2) {
+        if (ctl2 == null) return false;
+        try {
+            int pid;
+            ctl2.GetProcessId(out pid);
+            if (pid > 0) {
+                try {
+                    var p = Process.GetProcessById(pid);
+                    if (p.ProcessName.ToLower().Contains("spotify")) return true;
+                } catch {}
+            }
+        } catch {}
+        try {
+            string sessId;
+            ctl2.GetSessionIdentifier(out sessId);
+            if (sessId != null && sessId.ToLower().Contains("spotify")) return true;
+        } catch {}
+        try {
+            string instId;
+            ctl2.GetSessionInstanceIdentifier(out instId);
+            if (instId != null && instId.ToLower().Contains("spotify")) return true;
+        } catch {}
+        return false;
+    }
+
     public static float Get() {
         try {
             var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
             IMMDevice speakers;
             enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);
-            var iid = typeof(IAudioEndpointVolume).GUID;
+            var iid = typeof(IAudioSessionManager2).GUID;
             object o;
             speakers.Activate(ref iid, 0x17, IntPtr.Zero, out o);
-            var aepv = (IAudioEndpointVolume)o;
-            float vol = 0;
-            aepv.GetMasterVolumeLevelScalar(out vol);
-            return vol;
-        } catch { return 1.0f; }
+            var mgr = (IAudioSessionManager2)o;
+            IAudioSessionEnumerator sessionEnum;
+            mgr.GetSessionEnumerator(out sessionEnum);
+            int count;
+            sessionEnum.GetCount(out count);
+            for (int i = 0; i < count; i++) {
+                IAudioSessionControl ctl;
+                sessionEnum.GetSession(i, out ctl);
+                var ctl2 = ctl as IAudioSessionControl2;
+                if (IsSpotifySession(ctl2)) {
+                    var volCtl = ctl as ISimpleAudioVolume;
+                    if (volCtl != null) {
+                        float v;
+                        volCtl.GetMasterVolume(out v);
+                        return v;
+                    }
+                }
+            }
+        } catch {}
+        return -1.0f;
     }
-    public static void Set(float vol) {
+
+    public static bool Set(float vol) {
+        bool found = false;
         try {
             var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
             IMMDevice speakers;
             enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);
-            var iid = typeof(IAudioEndpointVolume).GUID;
+            var iid = typeof(IAudioSessionManager2).GUID;
             object o;
             speakers.Activate(ref iid, 0x17, IntPtr.Zero, out o);
-            var aepv = (IAudioEndpointVolume)o;
-            Guid g = Guid.Empty;
-            aepv.SetMasterVolumeLevelScalar(vol, ref g);
+            var mgr = (IAudioSessionManager2)o;
+            IAudioSessionEnumerator sessionEnum;
+            mgr.GetSessionEnumerator(out sessionEnum);
+            int count;
+            sessionEnum.GetCount(out count);
+            for (int i = 0; i < count; i++) {
+                IAudioSessionControl ctl;
+                sessionEnum.GetSession(i, out ctl);
+                var ctl2 = ctl as IAudioSessionControl2;
+                if (IsSpotifySession(ctl2)) {
+                    var volCtl = ctl as ISimpleAudioVolume;
+                    if (volCtl != null) {
+                        Guid g = Guid.Empty;
+                        volCtl.SetMasterVolume(vol, ref g);
+                        volCtl.SetMute(vol <= 0.001f, ref g);
+                        found = true;
+                    }
+                }
+            }
         } catch {}
-    }
-    public static void SetMute(bool mute) {
-        try {
-            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
-            IMMDevice speakers;
-            enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);
-            var iid = typeof(IAudioEndpointVolume).GUID;
-            object o;
-            speakers.Activate(ref iid, 0x17, IntPtr.Zero, out o);
-            var aepv = (IAudioEndpointVolume)o;
-            Guid g = Guid.Empty;
-            aepv.SetMute(mute, ref g);
-        } catch {}
+        return found;
     }
 }
 "@
@@ -153,6 +253,10 @@ $script:currentVolume = 80
 $script:volCheckCounter = 0
 
 # Read initial active volume from Spotify
+$initVol = [SpotifyAppVolume]::Get()
+if ($initVol -ge 0 -and $initVol -le 1.0) {
+    $script:currentVolume = [int][math]::Round($initVol * 100)
+}
 if ($cliPath) {
     try {
         $dev = & $cliPath devices --format json 2>$null | ConvertFrom-Json
@@ -207,6 +311,17 @@ function Update-SpotifyMetadata($title, $artist) {
     } catch {}
 }
 
+function Send-SpotifyQueue {
+    if (-not $cliPath -or -not $writer) { return }
+    try {
+        $qRaw = & $cliPath queue --format json 2>$null
+        if ($qRaw) {
+            $writer.WriteLine('{"type":"queue","data":' + $qRaw + '}')
+            $writer.Flush()
+        }
+    } catch {}
+}
+
 if ($Port -le 0) {
     $s = Get-SpotifySession
     if ($s) {
@@ -220,7 +335,7 @@ if ($Port -le 0) {
     } else {
         Write-Output "No Spotify session found"
     }
-    Write-Output "Volume is: $([math]::Round(([AudioMasterReal]::Get()) * 100))%"
+    Write-Output "Volume is: $([math]::Round(([SpotifyAppVolume]::Get()) * 100))%"
     exit 0
 }
 
@@ -251,16 +366,12 @@ try {
                     $script:volCheckCounter = 0
                     $vFloat = [math]::Round($vInt / 100.0, 2)
 
-                    # Update Spotify's internal application volume
+                    # 1. Update Spotify application audio session volume via Windows CoreAudio immediately
+                    [SpotifyAppVolume]::Set($vFloat) | Out-Null
+
+                    # 2. Also update Spotify's internal application volume via CLI asynchronously without blocking
                     if ($cliPath) {
-                        & $cliPath volume $vFloat 2>$null | Out-Null
-                    }
-                    # Also update Windows endpoint volume
-                    [AudioMasterReal]::Set($vFloat)
-                    if ($vInt -eq 0) {
-                        [AudioMasterReal]::SetMute($true)
-                    } else {
-                        [AudioMasterReal]::SetMute($false)
+                        Start-Process -FilePath $cliPath -ArgumentList "volume $vFloat" -WindowStyle Hidden -ErrorAction SilentlyContinue
                     }
                 } elseif ($cmd -eq "togglelike") {
                     if ($cliPath -and $script:currentUri) {
@@ -271,6 +382,30 @@ try {
                             & $cliPath library add $script:currentUri 2>$null | Out-Null
                             $script:isLiked = $true
                         }
+                    }
+                } elseif ($cmd -eq "queue:list") {
+                    Send-SpotifyQueue
+                } elseif ($cmd.StartsWith("queue:remove:")) {
+                    if ($cliPath) {
+                        $pos = $cmd.Substring(13)
+                        & $cliPath queue remove $pos 2>$null | Out-Null
+                        Send-SpotifyQueue
+                    }
+                } elseif ($cmd.StartsWith("queue:move:")) {
+                    if ($cliPath) {
+                        $parts = $cmd.Substring(11).Split(":")
+                        if ($parts.Length -eq 2) {
+                            $from = $parts[0]
+                            $to = $parts[1]
+                            & $cliPath queue move $from $to 2>$null | Out-Null
+                            Send-SpotifyQueue
+                        }
+                    }
+                } elseif ($cmd.StartsWith("queue:play:")) {
+                    if ($cliPath) {
+                        $uri = $cmd.Substring(11)
+                        & $cliPath play $uri 2>$null | Out-Null
+                        Send-SpotifyQueue
                     }
                 } else {
                     $s = Get-SpotifySession
@@ -336,6 +471,7 @@ try {
                 if ($trackKey -ne $script:lastTrackKey -and $title -ne "") {
                     $script:lastTrackKey = $trackKey
                     Update-SpotifyMetadata $title $artist
+                    Send-SpotifyQueue
                 }
 
                 # Precise position calculation using LastUpdatedTime
@@ -368,21 +504,14 @@ try {
                 $canPrev = if ($ctrls) { [bool]$ctrls.IsPreviousEnabled } else { $true }
                 $canSeek = if ($ctrls) { [bool]$ctrls.IsPlaybackPositionEnabled } else { $true }
 
-                # Periodically re-sync with active Spotify device volume (every ~30 ticks / 4.5s)
+                # Periodically re-sync with active Spotify application volume (every ~25 ticks / 3.75s)
                 $script:volCheckCounter++
-                if ($script:volCheckCounter -ge 30 -and $cliPath) {
+                if ($script:volCheckCounter -ge 25) {
                     $script:volCheckCounter = 0
-                    try {
-                        $dev = & $cliPath devices --format json 2>$null | ConvertFrom-Json
-                        if ($dev -and $dev.devices) {
-                            foreach ($d in $dev.devices) {
-                                if ($d.is_active -and $null -ne $d.volume) {
-                                    $script:currentVolume = [int]$d.volume
-                                    break
-                                }
-                            }
-                        }
-                    } catch {}
+                    $vGet = [SpotifyAppVolume]::Get()
+                    if ($vGet -ge 0 -and $vGet -le 1.0) {
+                        $script:currentVolume = [int][math]::Round($vGet * 100)
+                    }
                 }
 
                 $obj = [PSCustomObject]@{

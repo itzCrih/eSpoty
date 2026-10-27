@@ -159,7 +159,7 @@ public class SpotifyAuth {
                 message = "Unknown error occurred during authorization callback.";
             }
 
-            // Beautiful Gold & Yellow themed response HTML
+            // Auth callback response HTML
             String responseHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
                     "<title>eSpoty - Spotify Integration</title>" +
                     "<style>" +

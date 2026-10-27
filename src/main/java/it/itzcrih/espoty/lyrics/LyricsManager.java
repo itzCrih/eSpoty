@@ -68,7 +68,6 @@ public class LyricsManager {
 
         public int getActiveIndex(long progressMs) {
             if (!synced || lines.isEmpty()) return -1;
-            // 120ms lead time creates perfectly natural lyric delivery aligned with human auditory perception
             long targetMs = progressMs + 120;
             int low = 0;
             int high = lines.size() - 1;

@@ -7,7 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 public class AudioWaveformRenderer {
 
     /**
-     * Backward-compatible overload.
+     * Backward-compatible overloads.
      */
     public static void renderWaveform(GuiGraphics guiGraphics, int x, int y, int width, int maxHeight,
                                       int numBars, boolean isPlaying, long timeMs, float alpha) {
@@ -19,15 +19,9 @@ public class AudioWaveformRenderer {
     public static void renderWaveform(GuiGraphics guiGraphics, int x, int y, int width, int maxHeight,
                                       int numBars, boolean isPlaying, long timeMs, float alpha, int colorBottomRgb, int colorTopRgb) {
         renderSyncedWaveform(guiGraphics, x, y, width, maxHeight, numBars, isPlaying, timeMs, alpha,
-                colorBottomRgb, colorTopRgb, "track", "artist", true);
+                colorBottomRgb, colorTopRgb, "track", "artist", true, 1.0f);
     }
 
-    /**
-     * Renders a song-synchronized dynamic audio equalizer waveform.
-     * The frequency spectrum bars pulse and groove in lock-step with the song's musical rhythm,
-     * BPM tempo, kick/snare attacks, and vocal lyric energy.
-     * Highly optimized: pre-computes harmonics outside the loop for 0 FPS drops.
-     */
     public static void renderSyncedWaveform(
             GuiGraphics guiGraphics,
             int x,
@@ -44,6 +38,30 @@ public class AudioWaveformRenderer {
             String artistNames,
             boolean hasActiveLyric
     ) {
+        renderSyncedWaveform(guiGraphics, x, y, width, maxHeight, numBars, isPlaying, songProgressMs, alpha,
+                colorBottomRgb, colorTopRgb, trackTitle, artistNames, hasActiveLyric, 1.0f);
+    }
+
+    /**
+     * Renders a song-synchronized audio equalizer waveform.
+     */
+    public static void renderSyncedWaveform(
+            GuiGraphics guiGraphics,
+            int x,
+            int y,
+            int width,
+            int maxHeight,
+            int numBars,
+            boolean isPlaying,
+            long songProgressMs,
+            float alpha,
+            int colorBottomRgb,
+            int colorTopRgb,
+            String trackTitle,
+            String artistNames,
+            boolean hasActiveLyric,
+            float volumeRatio
+    ) {
         if (numBars <= 0 || width <= 0 || maxHeight <= 0 || alpha <= 0.005f) return;
 
         int barWidth = Math.max(1, (width / numBars) - 1);
@@ -53,7 +71,7 @@ public class AudioWaveformRenderer {
         int colorBottom = applyAlpha(colorBottomRgb, alpha);
         int colorTop = applyAlpha(colorTopRgb, alpha);
 
-        if (!isPlaying) {
+        if (!isPlaying || volumeRatio <= 0.005f) {
             // Resting idle state (gentle 2px bar)
             for (int i = 0; i < numBars; i++) {
                 int bx = startX + (i * (barWidth + 1));
@@ -62,9 +80,13 @@ public class AudioWaveformRenderer {
             return;
         }
 
+        // Volume scaling curve: responsive non-linear loudness
+        double volScale = Math.max(0.0, Math.min(1.0, (double) volumeRatio));
+        double volFactor = 0.20 + 0.80 * Math.pow(volScale, 0.7);
+
         // Derive track-specific musical signature and tempo
-        int songHash = Math.abs((trackTitle + "::" + artistNames).hashCode());
-        int bpm = 112 + (songHash % 26); // 112 to 138 BPM
+        int songHash = Math.abs(((trackTitle != null ? trackTitle : "") + "::" + (artistNames != null ? artistNames : "")).hashCode());
+        int bpm = 110 + (songHash % 32); // 110 to 142 BPM
         double beatDurationMs = 60000.0 / bpm;
 
         double beatPhase = (songProgressMs % beatDurationMs) / beatDurationMs;
@@ -80,38 +102,32 @@ public class AudioWaveformRenderer {
         double sixteenthPulse = Math.abs(Math.sin(sixteenthPhase * Math.PI));
 
         double songSec = songProgressMs / 1000.0;
-
-        // Pre-compute the 6 frequency bands once outside the bar loop for high performance
-        double subBase = 0.18 + (0.72 * kickPulse) + (0.10 * Math.sin(songSec * 3.8 + (songHash * 0.1)));
-        double bassBase = 0.22 + (0.50 * kickPulse) + (0.28 * snarePulse) + (0.10 * Math.sin(songSec * 5.2 + (songHash * 0.2)));
-        double vocalLift = hasActiveLyric ? 0.32 : 0.10;
-        double lowMidBase = 0.25 + vocalLift + (0.22 * Math.sin(songSec * 7.4 + (songHash * 0.3))) + (0.15 * snarePulse);
-        double vocalHarmonic = hasActiveLyric ? 0.38 : 0.14;
-        double highMidBase = 0.24 + vocalHarmonic + (0.20 * Math.cos(songSec * 9.6 + (songHash * 0.4))) + (0.20 * sixteenthPulse);
-        double clapBase = 0.20 + (0.58 * snarePulse) + (0.16 * Math.sin(songSec * 12.0 + (songHash * 0.5))) + (0.12 * sixteenthPulse);
-        double hatBase = 0.18 + (0.42 * Math.abs(Math.sin(songSec * 16.0 + (songHash * 0.6)))) + (0.35 * sixteenthPulse) + (0.10 * kickPulse);
-
-        double b0 = Math.max(0.12, Math.min(1.0, subBase));
-        double b1 = Math.max(0.12, Math.min(1.0, bassBase));
-        double b2 = Math.max(0.12, Math.min(1.0, lowMidBase));
-        double b3 = Math.max(0.12, Math.min(1.0, highMidBase));
-        double b4 = Math.max(0.12, Math.min(1.0, clapBase));
-        double b5 = Math.max(0.12, Math.min(1.0, hatBase));
-
         int tipColor = applyAlpha(0xFFFFFFFF, alpha * 0.92f);
 
         for (int i = 0; i < numBars; i++) {
             int bx = startX + (i * (barWidth + 1));
-            double normalized = switch (i % 6) {
-                case 0 -> b0;
-                case 1 -> b1;
-                case 2 -> b2;
-                case 3 -> b3;
-                case 4 -> b4;
-                default -> b5;
-            };
 
-            int h = Math.max(2, (int) (normalized * maxHeight));
+            // Frequency spectrum position: 0.0 = deep sub-bass (left), 1.0 = crystal treble (right)
+            double f = (numBars > 1) ? (i / (double) (numBars - 1)) : 0.5;
+
+            // Frequency bands response
+            double wKick = Math.max(0.0, 1.0 - (f / 0.32));
+            double subEnergy = (0.18 + 0.68 * kickPulse) * wKick;
+
+            double wMid = Math.max(0.0, 1.0 - Math.abs(f - 0.48) / 0.28);
+            double snareEnergy = (0.14 + 0.52 * snarePulse) * wMid;
+            double vocalEnergy = hasActiveLyric ? (0.34 * wMid) : (0.08 * wMid);
+
+            double wTreble = Math.max(0.0, (f - 0.55) / 0.45);
+            double highEnergy = (0.14 + 0.50 * sixteenthPulse) * wTreble;
+
+            // Organic harmonic wave unique to each individual bar (no repeating modulo)
+            double barNoise = 0.12 * Math.sin(songSec * (3.0 + (i * 0.7)) + (i * 1.3) + (songHash * 0.02));
+            double barNoise2 = 0.08 * Math.cos(songSec * (5.5 + (i * 0.4)) + (i * 2.1));
+
+            double normalized = Math.max(0.08, Math.min(1.0, subEnergy + snareEnergy + vocalEnergy + highEnergy + 0.10 + barNoise + barNoise2));
+
+            int h = Math.max(2, (int) (normalized * maxHeight * volFactor));
             int barTop = y - h;
 
             if (barWidth > 1) {
