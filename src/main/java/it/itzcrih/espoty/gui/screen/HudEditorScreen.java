@@ -211,7 +211,7 @@ public class HudEditorScreen extends Screen {
         AaRoundRect.draw(guiGraphics, hudX - 2, hudY - 2, scaledW + 4, scaledH + 4, 8, 0x00000000, outlineColor);
 
         // Interactive Corner Handles (8x8 px with high-contrast ring & glow)
-        int handleHitRadius = 8;
+        int handleHitRadius = 10;
         int accent2 = ThemeManager.getAccent2();
 
         boolean tlHover = isMouseOver(mouseX, mouseY, hudX - handleHitRadius, hudY - handleHitRadius, handleHitRadius * 2, handleHitRadius * 2);
@@ -224,14 +224,16 @@ public class HudEditorScreen extends Screen {
         drawCornerHandle(guiGraphics, hudX, hudY + scaledH, blHover || activeCorner == ResizeCorner.BOTTOM_LEFT, accent, accent2);
         drawCornerHandle(guiGraphics, hudX + scaledW, hudY + scaledH, brHover || activeCorner == ResizeCorner.BOTTOM_RIGHT, accent, accent2);
 
-        // Small floating badge above HUD indicating current scale
-        String hudBadge = "eSpoty HUD (" + Math.round(hudScale * 100.0f) + "%)";
-        int badgeW = this.font.width(hudBadge) + 12;
-        int badgeH = 14;
+        // Sleek floating badge above HUD indicating current scale and drag handle
+        String hudBadge = "✥ Drag to Move  |  eSpoty HUD (" + Math.round(hudScale * 100.0f) + "%)";
+        int badgeW = this.font.width(hudBadge) + 16;
+        int badgeH = 16;
         int badgeX = hudX + (scaledW - badgeW) / 2;
-        int badgeY = Math.max(4, hudY - 18);
-        AaRoundRect.draw(guiGraphics, badgeX, badgeY, badgeW, badgeH, 4, 0xDD0D0D14, ThemeManager.applyAlpha(accent, 0.45f));
-        guiGraphics.drawCenteredString(this.font, hudBadge, badgeX + (badgeW / 2), badgeY + 3, accent2);
+        int badgeY = Math.max(4, hudY - 20);
+        int badgeBg = isDragging ? ThemeManager.applyAlpha(accent, 0.45f) : 0xEE0D0D14;
+        int badgeBorder = (isDragging || hudHover) ? accent : ThemeManager.applyAlpha(accent, 0.60f);
+        AaRoundRect.draw(guiGraphics, badgeX, badgeY, badgeW, badgeH, 5, badgeBg, badgeBorder);
+        guiGraphics.drawCenteredString(this.font, hudBadge, badgeX + (badgeW / 2), badgeY + 4, (isDragging || hudHover) ? 0xFFFFFFFF : accent2);
 
         // 5. Centered Top Control Bar with "Save" button
         renderTopControlBar(guiGraphics, mouseX, mouseY);
@@ -314,7 +316,7 @@ public class HudEditorScreen extends Screen {
     }
 
     private void renderBottomHelpBar(GuiGraphics guiGraphics) {
-        String infoText = "Drag to Move";
+        String infoText = "Click & drag HUD card to move  •  Drag corner handles to resize  •  Arrow keys to nudge";
         int textW = this.font.width(infoText);
         int barW = textW + 24;
         int barH = 20;
@@ -385,7 +387,7 @@ public class HudEditorScreen extends Screen {
         // 4. Corner Handles Click (all 4 corners supported)
         int scaledW = getScaledWidth();
         int scaledH = getScaledHeight();
-        int handleHitRadius = 8;
+        int handleHitRadius = 10;
 
         // Top-Left corner: (hudX, hudY)
         if (isMouseOver(mx, my, hudX - handleHitRadius, hudY - handleHitRadius, handleHitRadius * 2, handleHitRadius * 2)) {
@@ -419,8 +421,15 @@ public class HudEditorScreen extends Screen {
             return true;
         }
 
-        // 5. HUD Card Drag Click (when clicking anywhere inside the card)
-        if (isMouseOver(mx, my, hudX, hudY, scaledW, scaledH)) {
+        // 5. HUD Card Drag Click (when clicking anywhere inside the card or its top handle badge)
+        String hudBadge = "✥ Drag to Move  |  eSpoty HUD (" + Math.round(hudScale * 100.0f) + "%)";
+        int badgeW = this.font.width(hudBadge) + 16;
+        int badgeH = 16;
+        int badgeX = hudX + (scaledW - badgeW) / 2;
+        int badgeY = Math.max(4, hudY - 20);
+
+        if (isMouseOver(mx, my, hudX - 4, hudY - 4, scaledW + 8, scaledH + 8)
+                || isMouseOver(mx, my, badgeX, badgeY, badgeW, badgeH)) {
             this.isDragging = true;
             this.dragOffsetX = mx - hudX;
             this.dragOffsetY = my - hudY;

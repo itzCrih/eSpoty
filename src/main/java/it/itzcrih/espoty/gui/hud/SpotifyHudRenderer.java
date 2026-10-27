@@ -210,16 +210,27 @@ public class SpotifyHudRenderer {
 
         // Marquee scrolling for track title
         int rightOffset = isLiked ? 46 : 34;
-        guiGraphics.enableScissor(textX, titleY - 1, textX + maxTextWidth - rightOffset, titleY + 10);
-        if (titleWidth > maxTextWidth - rightOffset) {
+        int maxTitleW = maxTextWidth - rightOffset;
+        if (titleWidth > maxTitleW) {
+            int scX1 = screenX + (int) Math.floor(textX * scale);
+            int scY1 = screenY + (int) Math.floor((titleY - 2) * scale);
+            int scX2 = screenX + (int) Math.ceil((textX + maxTitleW) * scale);
+            int scY2 = screenY + (int) Math.ceil((titleY + 12) * scale);
+            boolean scissored = false;
+            if (scX2 > scX1 && scY2 > scY1) {
+                guiGraphics.enableScissor(scX1, scY1, scX2, scY2);
+                scissored = true;
+            }
             long cycle = (now / 35) % (titleWidth + 40);
             int scrollX = (int) (textX - cycle);
             guiGraphics.drawString(font, trackTitle, scrollX, titleY, applyAlpha(accentColor, elemAlpha), true);
             guiGraphics.drawString(font, trackTitle, scrollX + titleWidth + 40, titleY, applyAlpha(accentColor, elemAlpha), true);
+            if (scissored) {
+                guiGraphics.disableScissor();
+            }
         } else {
             guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
         }
-        guiGraphics.disableScissor();
 
         // Artist Name
         int artistY = titleY + 11;
@@ -302,7 +313,17 @@ public class SpotifyHudRenderer {
             Component lyricComp = (cachedLyricComp != null) ? cachedLyricComp : Component.literal(lyricText).withStyle(currentFont.getStyle());
             int lyricWidth = (cachedLyricComp != null) ? cachedLyricWidth : font.width(lyricComp);
 
-            guiGraphics.enableScissor(x + 18, dividerY + 1, x + cardWidth - 8, y + dynamicTotalHeight);
+            boolean scissoredLyric = false;
+            if (lyricWidth > maxLyricW) {
+                int scLyrX1 = screenX + (int) Math.floor((x + 18) * scale);
+                int scLyrY1 = screenY + (int) Math.floor((dividerY + 1) * scale);
+                int scLyrX2 = screenX + (int) Math.ceil((x + cardWidth - 8) * scale);
+                int scLyrY2 = screenY + (int) Math.ceil((y + dynamicTotalHeight) * scale);
+                if (scLyrX2 > scLyrX1 && scLyrY2 > scLyrY1) {
+                    guiGraphics.enableScissor(scLyrX1, scLyrY1, scLyrX2, scLyrY2);
+                    scissoredLyric = true;
+                }
+            }
 
             // Smooth cross-fade outgoing line if transitioning
             if (prevLyricLine != null && !prevLyricLine.isEmpty() && lyricProgress < 1.0f && cachedPrevLyricComp != null) {
@@ -319,7 +340,9 @@ public class SpotifyHudRenderer {
             } else {
                 guiGraphics.drawString(font, lyricComp, x + 18, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
             }
-            guiGraphics.disableScissor();
+            if (scissoredLyric) {
+                guiGraphics.disableScissor();
+            }
         } else if (!hasActiveLyric || !showLyrics) {
             lastLyricLine = "";
             prevLyricLine = "";
@@ -544,8 +567,9 @@ public class SpotifyHudRenderer {
         int x = 0;
         int y = 0;
 
-        float bgAlpha = alpha * config.getHudBackgroundOpacity();
-        float elemAlpha = alpha * config.getHudElementsOpacity();
+        // In editor preview, maintain clear visibility even if configured in-game opacity is 0%
+        float bgAlpha = alpha * Math.max(0.65f, config.getHudBackgroundOpacity());
+        float elemAlpha = alpha * Math.max(0.85f, config.getHudElementsOpacity());
 
         renderModernCard(guiGraphics, x, y, cardWidth, dynamicTotalHeight, bgAlpha);
 
@@ -571,9 +595,24 @@ public class SpotifyHudRenderer {
                 state.getTrackName(), state.getArtistNames(), false);
 
         int rightOffset = isLiked ? 46 : 34;
-        guiGraphics.enableScissor(textX, titleY - 1, textX + maxTextWidth - rightOffset, titleY + 10);
-        guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
-        guiGraphics.disableScissor();
+        int maxTitleW = maxTextWidth - rightOffset;
+        if (font.width(trackTitle) > maxTitleW) {
+            int scX1 = screenX + (int) Math.floor(textX * scale);
+            int scY1 = screenY + (int) Math.floor((titleY - 2) * scale);
+            int scX2 = screenX + (int) Math.ceil((textX + maxTitleW) * scale);
+            int scY2 = screenY + (int) Math.ceil((titleY + 12) * scale);
+            boolean scissored = false;
+            if (scX2 > scX1 && scY2 > scY1) {
+                guiGraphics.enableScissor(scX1, scY1, scX2, scY2);
+                scissored = true;
+            }
+            guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
+            if (scissored) {
+                guiGraphics.disableScissor();
+            }
+        } else {
+            guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
+        }
 
         int artistY = titleY + 11;
         String artist = state.getArtistNames();
