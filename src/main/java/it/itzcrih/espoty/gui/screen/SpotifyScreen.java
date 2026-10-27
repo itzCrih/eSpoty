@@ -40,12 +40,12 @@ import java.util.List;
 public class SpotifyScreen extends Screen {
 
     public enum Tab {
-        PLAYER("Player", ">", "Desktop media playback & controls"),
-        LYRICS("Lyrics", "=", "Synchronized real-time song lyrics"),
-        QUEUE("Queue", "#", "Next tracks & queue management"),
-        HUD_EDITOR("Hud Editor", "+", "Live in-game HUD positioning & scaling"),
-        THEMES("Themes", "*", "Liquid glass atmosphere & accents"),
-        SETTINGS("Settings", "@", "In-game HUD, 3D celestial sky & ducking");
+        PLAYER("Player", "🎵", "Desktop media playback & controls"),
+        LYRICS("Lyrics", "📜", "Synchronized real-time song lyrics"),
+        QUEUE("Queue", "📑", "Next tracks & queue management"),
+        HUD_EDITOR("Hud Editor", "📐", "Live in-game HUD positioning & scaling"),
+        THEMES("Themes", "🎨", "Liquid glass atmosphere & accents"),
+        SETTINGS("Settings", "⚙", "In-game HUD, 3D celestial sky & ducking");
 
         private final String title;
         private final String icon;
@@ -79,15 +79,21 @@ public class SpotifyScreen extends Screen {
 
     // Content total heights for exact scrolling boundaries
     private static final int THEMES_CONTENT_HEIGHT = 414;
-    private static final int SETTINGS_CONTENT_HEIGHT = 612;
+    private static final int SETTINGS_CONTENT_HEIGHT = 650;
 
     // Interactive slider dragging states
     private boolean isDraggingSeek = false;
     private float dragSeekRatio = 0f;
     private boolean isDraggingVolume = false;
     private float dragVolumeRatio = 0f;
-    private boolean isDraggingHudOpacity = false;
-    private float dragHudOpacityRatio = 0.85f;
+    private boolean isDraggingHudBgOpacity = false;
+    private float dragHudBgOpacityRatio = 0.85f;
+    private boolean isDraggingHudElemOpacity = false;
+    private float dragHudElemOpacityRatio = 1.0f;
+
+    // Toggle switch smooth animation state
+    private final java.util.Map<Integer, Float> switchAnimProgress = new java.util.HashMap<>();
+    private long lastAnimTimeMs = System.currentTimeMillis();
     private boolean isDraggingHudScale = false;
     private float dragHudScaleRatio = 0.5f;
     private boolean isDraggingSkyScale = false;
@@ -138,7 +144,8 @@ public class SpotifyScreen extends Screen {
 
         this.dragSkyLinesRatio = (config.getSkyLyricsLength() - 3) / 22.0f;
         this.dragSkyScaleRatio = (config.getSkyLyricsScalePercent() - 50) / 150.0f;
-        this.dragHudOpacityRatio = config.getHudOpacity();
+        this.dragHudBgOpacityRatio = config.getHudBackgroundOpacity();
+        this.dragHudElemOpacityRatio = (config.getHudElementsOpacity() - 0.10f) / 0.90f;
         this.dragHudScaleRatio = (config.getHudScalePercent() - 50) / 100.0f;
         this.dragGlassOpacityRatio = (config.getGlassOpacity() - 0.40f) / 0.60f;
         this.dragDuckingRatio = (config.getDuckingMultiplier() - 0.05f) / 0.95f;
@@ -323,7 +330,7 @@ guiGraphics.pose().pushMatrix();
         int closeText = closeHover ? 0xFFFF5555 : 0xFFCBD5E1;
 
         AaRoundRect.draw(guiGraphics, closeX, closeY, closeSize, closeSize, closeSize / 2, closeBg, closeBorder);
-        guiGraphics.drawCenteredString(this.font, "x", closeX + (closeSize / 2), closeY + 4, closeText);
+        guiGraphics.drawCenteredString(this.font, "✕", closeX + (closeSize / 2), closeY + 4, closeText);
 
         // Hairline separator below header
         guiGraphics.fillGradient(contentX, modalY + 38, modalX + modalWidth - 12, modalY + 39, ThemeManager.getGlassEdge(), 0x05FFFFFF);
@@ -392,7 +399,7 @@ guiGraphics.pose().pushMatrix();
         int heartY = contentY + 8;
         boolean heartHover = isMouseOver(mouseX, mouseY, heartX - 4, heartY - 4, 18, 18);
         int heartColor = isLiked ? accent : (heartHover ? accent2 : ThemeManager.getTextMuted());
-        guiGraphics.drawString(this.font, isLiked ? "[+]" : "[-]", heartX, heartY, heartColor, isLiked);
+        guiGraphics.drawString(this.font, isLiked ? "❤" : "♡", heartX, heartY, isLiked ? 0xFFFF4081 : heartColor, isLiked);
 
         // Device indicator tag
         if (state.getDeviceName() != null && !state.getDeviceName().isEmpty()) {
@@ -990,7 +997,7 @@ guiGraphics.pose().pushMatrix();
         renderGroupHeader(guiGraphics, "IN-GAME HUD OVERLAY", contentX + 2, curY);
         curY += 15;
 
-        int hudGroupRows = 4;
+        int hudGroupRows = 5;
         int hudCardH = hudGroupRows * rowH;
         renderGroupCardBackground(guiGraphics, contentX, curY, cardW, hudCardH);
 
@@ -1010,26 +1017,37 @@ guiGraphics.pose().pushMatrix();
         renderSwitch(guiGraphics, config.isHudShowLyrics(), switchX, h2Y + 11, hudLyricsHover);
         renderHairline(guiGraphics, contentX + 12, h2Y + rowH, cardW - 24);
 
-        // Row 3: HUD Opacity (Slider + Badge)
+        // Row 3: HUD Background Opacity (Slider + Badge)
         int h3Y = curY + (rowH * 2);
         renderRowHover(guiGraphics, contentX, h3Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h3Y, cardW, rowH));
-        renderSettingLabel(guiGraphics, "HUD Opacity", "Translucency of overlay", contentX + 14, h3Y, sliderX);
-        int opacPercent = isDraggingHudOpacity ? Math.round(dragHudOpacityRatio * 100) : config.getHudOpacityPercent();
-        float opacRatio = opacPercent / 100.0f;
-        boolean opacHover = isMouseOver(mouseX, mouseY, sliderX, h3Y + 11, sliderW, 16);
-        renderSlider(guiGraphics, sliderX, h3Y + 17, sliderW, opacRatio, opacHover);
-        renderBadge(guiGraphics, badgeX, h3Y + 10, badgeW, 18, (opacPercent == 0) ? "Off" : (opacPercent + "%"), opacHover);
+        renderSettingLabel(guiGraphics, "HUD Background Opacity", "Translucency of HUD and menu card", contentX + 14, h3Y, sliderX);
+        int bgOpacPercent = isDraggingHudBgOpacity ? Math.round(dragHudBgOpacityRatio * 100) : config.getHudBackgroundOpacityPercent();
+        float bgOpacRatio = bgOpacPercent / 100.0f;
+        boolean bgOpacHover = isMouseOver(mouseX, mouseY, sliderX, h3Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, h3Y + 17, sliderW, bgOpacRatio, bgOpacHover);
+        renderBadge(guiGraphics, badgeX, h3Y + 10, badgeW, 18, (bgOpacPercent == 0) ? "0%" : (bgOpacPercent + "%"), bgOpacHover);
         renderHairline(guiGraphics, contentX + 12, h3Y + rowH, cardW - 24);
 
-        // Row 4: HUD Scale (Slider + Badge)
+        // Row 4: HUD Elements Opacity (Slider + Badge)
         int h4Y = curY + (rowH * 3);
         renderRowHover(guiGraphics, contentX, h4Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h4Y, cardW, rowH));
-        renderSettingLabel(guiGraphics, "HUD Scale", "Size of the in-game overlay", contentX + 14, h4Y, sliderX);
+        renderSettingLabel(guiGraphics, "HUD Elements Opacity", "Opacity of text, art & controls", contentX + 14, h4Y, sliderX);
+        int elemOpacPercent = isDraggingHudElemOpacity ? Math.round(10 + dragHudElemOpacityRatio * 90) : config.getHudElementsOpacityPercent();
+        float elemOpacRatio = (elemOpacPercent - 10) / 90.0f;
+        boolean elemOpacHover = isMouseOver(mouseX, mouseY, sliderX, h4Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, h4Y + 17, sliderW, elemOpacRatio, elemOpacHover);
+        renderBadge(guiGraphics, badgeX, h4Y + 10, badgeW, 18, elemOpacPercent + "%", elemOpacHover);
+        renderHairline(guiGraphics, contentX + 12, h4Y + rowH, cardW - 24);
+
+        // Row 5: HUD Scale (Slider + Badge)
+        int h5Y = curY + (rowH * 4);
+        renderRowHover(guiGraphics, contentX, h5Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, h5Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "HUD Scale", "Size of the in-game overlay", contentX + 14, h5Y, sliderX);
         int scalePercent = isDraggingHudScale ? Math.round(50 + dragHudScaleRatio * 100) : config.getHudScalePercent();
         float scaleRatio = (scalePercent - 50) / 100.0f;
-        boolean scaleHover = isMouseOver(mouseX, mouseY, sliderX, h4Y + 11, sliderW, 16);
-        renderSlider(guiGraphics, sliderX, h4Y + 17, sliderW, scaleRatio, scaleHover);
-        renderBadge(guiGraphics, badgeX, h4Y + 10, badgeW, 18, scalePercent + "%", scaleHover);
+        boolean scaleHover = isMouseOver(mouseX, mouseY, sliderX, h5Y + 11, sliderW, 16);
+        renderSlider(guiGraphics, sliderX, h5Y + 17, sliderW, scaleRatio, scaleHover);
+        renderBadge(guiGraphics, badgeX, h5Y + 10, badgeW, 18, scalePercent + "%", scaleHover);
 
         curY += hudCardH + 16;
 
@@ -1166,26 +1184,69 @@ guiGraphics.pose().pushMatrix();
     }
 
     /**
-     * Toggle Switch: 32x16px full pill with 10px circular knob.
+     * Animated Toggle Switch: 32x16px full pill with 10px smoothly sliding circular knob.
      */
     private void renderSwitch(GuiGraphics g, boolean enabled, int x, int y, boolean hover) {
         int w = 32;
         int h = 16;
         int accent = ThemeManager.getAccent();
+        int accent2 = ThemeManager.getAccent2();
 
-        int bg = enabled ? (hover ? ThemeManager.getAccent2() : accent) : (hover ? 0x28FFFFFF : 0x1EFFFFFF);
-        int border = enabled ? accent : (hover ? 0x40FFFFFF : 0x28FFFFFF);
+        int key = (x << 16) | (y & 0xFFFF);
+        float target = enabled ? 1.0f : 0.0f;
+        float current = switchAnimProgress.getOrDefault(key, target);
+
+        long now = System.currentTimeMillis();
+        float dt = Math.min(0.08f, Math.max(0.001f, (now - lastAnimTimeMs) / 1000.0f));
+        current += (target - current) * Math.min(1.0f, dt * 18.0f);
+        if (Math.abs(target - current) < 0.003f) {
+            current = target;
+        }
+        switchAnimProgress.put(key, current);
+        lastAnimTimeMs = now;
+
+        int offBg = hover ? 0x28FFFFFF : 0x1EFFFFFF;
+        int onBg = hover ? accent2 : accent;
+        int bg = interpolateColor(offBg, onBg, current);
+
+        int offBorder = hover ? 0x40FFFFFF : 0x28FFFFFF;
+        int onBorder = accent;
+        int border = interpolateColor(offBorder, onBorder, current);
 
         // 8px radius pill capsule
         AaRoundRect.draw(g, x, y, w, h, 8, bg, border);
 
-        // 10px diameter circular knob
+        // 10px diameter circular knob smoothly sliding
         int knobSize = 10;
-        int knobX = enabled ? (x + w - knobSize - 3) : (x + 3);
+        int minKnobX = x + 3;
+        int maxKnobX = x + w - knobSize - 3;
+        int knobX = Math.round(minKnobX + (maxKnobX - minKnobX) * current);
         int knobY = y + 3;
-        int knobCol = enabled ? 0xFFFFFFFF : 0xFFB0B0C0;
+
+        int offKnob = 0xFFB0B0C0;
+        int onKnob = 0xFFFFFFFF;
+        int knobCol = interpolateColor(offKnob, onKnob, current);
 
         AaRoundRect.draw(g, knobX, knobY, knobSize, knobSize, 5, knobCol, 0);
+    }
+
+    private static int interpolateColor(int c1, int c2, float t) {
+        int a1 = (c1 >> 24) & 0xFF;
+        int r1 = (c1 >> 16) & 0xFF;
+        int g1 = (c1 >> 8) & 0xFF;
+        int b1 = c1 & 0xFF;
+
+        int a2 = (c2 >> 24) & 0xFF;
+        int r2 = (c2 >> 16) & 0xFF;
+        int g2 = (c2 >> 8) & 0xFF;
+        int b2 = c2 & 0xFF;
+
+        int a = (int) (a1 + (a2 - a1) * t);
+        int r = (int) (r1 + (r2 - r1) * t);
+        int g = (int) (g1 + (g2 - g1) * t);
+        int b = (int) (b1 + (b2 - b1) * t);
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     /**
@@ -1280,13 +1341,13 @@ guiGraphics.pose().pushMatrix();
                 g.fill(cx + 3, cy - 4, cx + 5, cy + 5, color);
             }
             case "SHUF" -> {
-                g.drawCenteredString(this.font, "[SHUF]", cx, cy - 4, color);
+                g.drawCenteredString(this.font, "🔀", cx, cy - 4, color);
             }
             case "REP" -> {
-                g.drawCenteredString(this.font, "[REP]", cx, cy - 4, color);
+                g.drawCenteredString(this.font, "🔁", cx, cy - 4, color);
             }
             case "REP1" -> {
-                g.drawCenteredString(this.font, "[REP1]", cx, cy - 4, color);
+                g.drawCenteredString(this.font, "🔂", cx, cy - 4, color);
             }
             default -> {
                 g.drawCenteredString(this.font, type, cx, cy - 4, color);
@@ -1784,19 +1845,29 @@ guiGraphics.pose().pushMatrix();
             return;
         }
 
-        // Row 3: HUD Opacity
+        // Row 3: HUD Background Opacity
         int h3Y = curY + (rowH * 2);
         if (isMouseOver(mx, my, sliderX - 4, h3Y + 8, sliderW + 8, 20)) {
-            this.isDraggingHudOpacity = true;
-            this.dragHudOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
-            int percent = Math.round(dragHudOpacityRatio * 100);
-            config.setHudOpacityPercent(percent);
+            this.isDraggingHudBgOpacity = true;
+            this.dragHudBgOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(dragHudBgOpacityRatio * 100);
+            config.setHudBackgroundOpacityPercent(percent);
             return;
         }
 
-        // Row 4: HUD Scale
+        // Row 4: HUD Elements Opacity
         int h4Y = curY + (rowH * 3);
         if (isMouseOver(mx, my, sliderX - 4, h4Y + 8, sliderW + 8, 20)) {
+            this.isDraggingHudElemOpacity = true;
+            this.dragHudElemOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(10 + dragHudElemOpacityRatio * 90);
+            config.setHudElementsOpacityPercent(percent);
+            return;
+        }
+
+        // Row 5: HUD Scale
+        int h5Y = curY + (rowH * 4);
+        if (isMouseOver(mx, my, sliderX - 4, h5Y + 8, sliderW + 8, 20)) {
             this.isDraggingHudScale = true;
             this.dragHudScaleRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
             int percent = Math.round(50 + dragHudScaleRatio * 100);
@@ -1804,7 +1875,7 @@ guiGraphics.pose().pushMatrix();
             return;
         }
 
-        curY += (4 * rowH) + 16;
+        curY += (5 * rowH) + 16;
 
         // GROUP 3: AUDIO DUCKING & UTILITIES
         curY += 15;
@@ -1869,7 +1940,7 @@ guiGraphics.pose().pushMatrix();
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         int mx = (int) event.x();
-        boolean hasAnyDrag = isDraggingSeek || isDraggingVolume || isDraggingHudOpacity
+        boolean hasAnyDrag = isDraggingSeek || isDraggingVolume || isDraggingHudBgOpacity || isDraggingHudElemOpacity
                 || isDraggingHudScale || isDraggingSkyScale || isDraggingSkyLines
                 || isDraggingGlassOpacity || isDraggingDucking;
 
@@ -1918,10 +1989,17 @@ guiGraphics.pose().pushMatrix();
             return true;
         }
 
-        if (isDraggingHudOpacity) {
-            this.dragHudOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
-            int percent = Math.round(dragHudOpacityRatio * 100);
-            config.setHudOpacityPercent(percent);
+        if (isDraggingHudBgOpacity) {
+            this.dragHudBgOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(dragHudBgOpacityRatio * 100);
+            config.setHudBackgroundOpacityPercent(percent);
+            return true;
+        }
+
+        if (isDraggingHudElemOpacity) {
+            this.dragHudElemOpacityRatio = Math.max(0f, Math.min(1f, (float) (mx - sliderX) / sliderW));
+            int percent = Math.round(10 + dragHudElemOpacityRatio * 90);
+            config.setHudElementsOpacityPercent(percent);
             return true;
         }
 
@@ -1960,7 +2038,8 @@ guiGraphics.pose().pushMatrix();
     public boolean mouseReleased(MouseButtonEvent event) {
         this.isDraggingSeek = false;
         this.isDraggingVolume = false;
-        this.isDraggingHudOpacity = false;
+        this.isDraggingHudBgOpacity = false;
+        this.isDraggingHudElemOpacity = false;
         this.isDraggingHudScale = false;
         this.isDraggingSkyScale = false;
         this.isDraggingSkyLines = false;

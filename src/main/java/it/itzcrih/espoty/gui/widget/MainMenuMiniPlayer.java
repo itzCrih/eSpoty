@@ -1,6 +1,7 @@
 package it.itzcrih.espoty.gui.widget;
 
 import it.itzcrih.espoty.config.ModConfig;
+import it.itzcrih.espoty.gui.render.AaRoundRect;
 import it.itzcrih.espoty.gui.screen.SpotifyScreen;
 import it.itzcrih.espoty.gui.texture.AlbumArtManager;
 import it.itzcrih.espoty.gui.theme.ThemeManager;
@@ -52,6 +53,9 @@ public class MainMenuMiniPlayer {
         int accent = ModConfig.getInstance().isSyncHudTheme() ? ThemeManager.getAccent() : 0xFFFFD700;
         int accent2 = ModConfig.getInstance().isSyncHudTheme() ? ThemeManager.getAccent2() : 0xFFFFF066;
 
+        float bgOpacity = ModConfig.getInstance().getHudBackgroundOpacity();
+        float elemOpacity = ModConfig.getInstance().getHudElementsOpacity();
+
         // 1. Horizontal gradient glow
         int steps = 20;
         int glowWidth = Math.min(w, 140);
@@ -59,15 +63,22 @@ public class MainMenuMiniPlayer {
         for (int i = 0; i < steps; i++) {
             float t = (float) i / (float) steps;
             float falloff = (1.0f - t) * (1.0f - t);
-            int glow = ThemeManager.applyAlpha(accent, falloff * 0.20f);
+            int glow = ThemeManager.applyAlpha(accent, falloff * 0.20f * bgOpacity);
             int gx1 = x + (int) (i * stepW);
             int gx2 = x + (int) ((i + 1) * stepW);
             guiGraphics.fill(gx1, y - 2, gx2, y + h + 2, glow);
         }
 
+        // 2. Liquid Glass rounded background card
+        if (bgOpacity > 0.02f) {
+            int cardBg = ThemeManager.applyAlpha(0xE00D0D14, bgOpacity);
+            int cardBorder = ThemeManager.applyAlpha(accent, 0.40f * bgOpacity);
+            AaRoundRect.draw(guiGraphics, x, y, w, h, 8, cardBg, cardBorder);
+        }
+
         // Subtle hover indicator
         if (cardHover) {
-            guiGraphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0x12FFFFFF);
+            guiGraphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, ThemeManager.applyAlpha(0x12FFFFFF, bgOpacity));
         }
 
         if (!stateManager.isSpotifyRunning() || state == null || state.getTrackName().isEmpty()) {
@@ -101,14 +112,14 @@ public class MainMenuMiniPlayer {
             cachedRawTrack = rawTrack;
             cachedTrimmedTrack = trimWithEllipsis(font, rawTrack, maxTextW);
         }
-        guiGraphics.drawString(font, cachedTrimmedTrack, textX, y + 6, 0xFFFFFFFF, true);
+        guiGraphics.drawString(font, cachedTrimmedTrack, textX, y + 6, ThemeManager.applyAlpha(0xFFFFFFFF, elemOpacity), true);
 
         String rawArtist = state.getArtistNames();
         if (!rawArtist.equals(cachedRawArtist)) {
             cachedRawArtist = rawArtist;
             cachedTrimmedArtist = trimWithEllipsis(font, rawArtist, maxTextW);
         }
-        guiGraphics.drawString(font, cachedTrimmedArtist, textX, y + 17, 0xFFCBD5E1, true);
+        guiGraphics.drawString(font, cachedTrimmedArtist, textX, y + 17, ThemeManager.applyAlpha(0xFFCBD5E1, elemOpacity), true);
 
         // 4. Mini Interactive Controls Row
         int btnY = y + 29;
@@ -119,28 +130,28 @@ public class MainMenuMiniPlayer {
         int prevX = textX;
         boolean prevHover = mouseX >= prevX - 2 && mouseX <= prevX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
         if (prevHover) guiGraphics.fill(prevX - 1, btnY - 1, prevX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
-        guiGraphics.drawString(font, "<<", prevX, btnY, prevHover ? accent : 0xFFCCCCCC, true);
+        guiGraphics.drawString(font, "◀◀", prevX, btnY, prevHover ? accent : ThemeManager.applyAlpha(0xFFCCCCCC, elemOpacity), true);
 
         // Play / Pause Button
         int playX = prevX + 17;
         boolean playHover = mouseX >= playX - 2 && mouseX <= playX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
         if (playHover) guiGraphics.fill(playX - 1, btnY - 1, playX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
-        String playIcon = state.isPlaying() ? "||" : ">";
-        guiGraphics.drawString(font, playIcon, playX, btnY, playHover ? accent : 0xFFFFFFFF, true);
+        String playIcon = state.isPlaying() ? "❚❚" : "▶";
+        guiGraphics.drawString(font, playIcon, playX, btnY, playHover ? accent : ThemeManager.applyAlpha(0xFFFFFFFF, elemOpacity), true);
 
         // Next Button
         int nextX = playX + 17;
         boolean nextHover = mouseX >= nextX - 2 && mouseX <= nextX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
         if (nextHover) guiGraphics.fill(nextX - 1, btnY - 1, nextX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
-        guiGraphics.drawString(font, ">>", nextX, btnY, nextHover ? accent : 0xFFCCCCCC, true);
+        guiGraphics.drawString(font, "▶▶", nextX, btnY, nextHover ? accent : ThemeManager.applyAlpha(0xFFCCCCCC, elemOpacity), true);
 
         // Like Button (Heart)
         int likeX = nextX + 18;
         boolean likeHover = mouseX >= likeX - 2 && mouseX <= likeX + btnW + 2 && mouseY >= btnY - 1 && mouseY <= btnY + btnH + 1;
         if (likeHover) guiGraphics.fill(likeX - 1, btnY - 1, likeX + btnW + 1, btnY + btnH + 1, 0x25FFFFFF);
         boolean isLiked = stateManager.isCurrentTrackLiked();
-        String heartIcon = isLiked ? "[+]" : "[-]";
-        int heartColor = isLiked ? 0xFFFF4444 : (likeHover ? accent : 0xFFAAAAAA);
+        String heartIcon = isLiked ? "❤" : "♡";
+        int heartColor = isLiked ? ThemeManager.applyAlpha(0xFFFF4081, elemOpacity) : (likeHover ? accent : ThemeManager.applyAlpha(0xFFAAAAAA, elemOpacity));
         guiGraphics.drawString(font, heartIcon, likeX, btnY, heartColor, true);
 
         // Mini Waveform
@@ -148,7 +159,7 @@ public class MainMenuMiniPlayer {
         int waveY = y + 39;
         long progressMs = stateManager.getInterpolatedProgressMs();
         AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, waveX, waveY, 32, 12, 6,
-                state.isPlaying(), progressMs, 1.0f, accent, accent2,
+                state.isPlaying(), progressMs, elemOpacity, accent, accent2,
                 state.getTrackName(), state.getArtistNames(), false);
     }
 

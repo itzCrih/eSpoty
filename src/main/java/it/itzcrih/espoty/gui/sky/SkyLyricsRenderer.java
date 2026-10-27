@@ -362,7 +362,7 @@ public class SkyLyricsRenderer {
         int coreAlphaByte = Math.max(0, Math.min(255, (int) (finalAlpha * 255.0f)));
         int coreColor = (coreAlphaByte << 24) | 0x00FFFFFF;
 
-        int shadowAlphaByte = Math.max(0, Math.min(255, (int) (finalAlpha * 180.0f)));
+        int shadowAlphaByte = Math.max(0, Math.min(255, (int) (finalAlpha * 220.0f)));
         int shadowColor = (shadowAlphaByte << 24) | 0x00000000;
 
         poseStack.pushPose();
@@ -411,15 +411,15 @@ public class SkyLyricsRenderer {
     }
 
     private static void rebuildCache(Font font, String trackName, String artistNames, LyricsManager.SongLyrics lyrics, Style baseStyle) {
-        Style pureWhiteStyle = baseStyle.withColor(PURE_WHITE);
+        Style lyricStyle = baseStyle;
 
         String cleanTrack = sanitizeClean(trackName);
-        cachedTitleComp = Component.literal(cleanTrack).withStyle(pureWhiteStyle);
+        cachedTitleComp = Component.literal(cleanTrack).withStyle(lyricStyle);
         cachedTitleHalfW = font.width(cachedTitleComp) / 2.0f;
 
         String cleanArtist = sanitizeClean(artistNames);
         if (!cleanArtist.isEmpty()) {
-            cachedArtistComp = Component.literal(cleanArtist).withStyle(pureWhiteStyle);
+            cachedArtistComp = Component.literal(cleanArtist).withStyle(lyricStyle);
             cachedArtistHalfW = font.width(cachedArtistComp) / 2.0f;
         } else {
             cachedArtistComp = null;
@@ -434,7 +434,7 @@ public class SkyLyricsRenderer {
             for (int i = 0; i < cachedLinesCount; i++) {
                 String raw = sanitizeClean(lines.get(i).getText());
                 if (!raw.isEmpty()) {
-                    Component comp = Component.literal(raw).withStyle(pureWhiteStyle);
+                    Component comp = Component.literal(raw).withStyle(lyricStyle);
                     cachedLines[i] = new CachedLine(comp, font.width(comp) / 2.0f);
                 } else {
                     cachedLines[i] = null;
@@ -448,7 +448,7 @@ public class SkyLyricsRenderer {
             for (int i = 0; i < cachedLinesCount; i++) {
                 String raw = sanitizeClean(rawPlain[i]);
                 if (!raw.isEmpty()) {
-                    Component comp = Component.literal(raw).withStyle(pureWhiteStyle);
+                    Component comp = Component.literal(raw).withStyle(lyricStyle);
                     cachedLines[i] = new CachedLine(comp, font.width(comp) / 2.0f);
                 } else {
                     cachedLines[i] = null;

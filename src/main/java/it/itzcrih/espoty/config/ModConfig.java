@@ -123,6 +123,8 @@ public class ModConfig {
     private int hudCustomX = -1;
     private int hudCustomY = -1;
     private float hudOpacity = 0.85f;
+    private float hudBackgroundOpacity = 0.85f;
+    private float hudElementsOpacity = 1.0f;
     private String customClientId = "";
     private int volume = 80;
     private int volumeStep = 5;
@@ -166,6 +168,12 @@ public class ModConfig {
                     if (config.themeLook == null) config.themeLook = ThemeLook.BOREALIS;
                     if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
                     if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
+                    if (config.hudBackgroundOpacity <= 0f && config.hudOpacity > 0f) {
+                        config.hudBackgroundOpacity = config.hudOpacity;
+                    }
+                    if (config.hudElementsOpacity <= 0.05f) {
+                        config.hudElementsOpacity = 1.0f;
+                    }
                     return config;
                 }
             } catch (Exception e) {
@@ -359,21 +367,55 @@ public class ModConfig {
         save();
     }
 
-    public float getHudOpacity() {
-        return Math.max(0.0f, Math.min(1.0f, hudOpacity));
+    public float getHudBackgroundOpacity() {
+        return Math.max(0.0f, Math.min(1.0f, hudBackgroundOpacity));
     }
 
-    public void setHudOpacity(float hudOpacity) {
-        this.hudOpacity = Math.max(0.0f, Math.min(1.0f, hudOpacity));
+    public void setHudBackgroundOpacity(float hudBackgroundOpacity) {
+        this.hudBackgroundOpacity = Math.max(0.0f, Math.min(1.0f, hudBackgroundOpacity));
+        this.hudOpacity = this.hudBackgroundOpacity;
         save();
     }
 
+    public int getHudBackgroundOpacityPercent() {
+        return Math.round(getHudBackgroundOpacity() * 100.0f);
+    }
+
+    public void setHudBackgroundOpacityPercent(int percent) {
+        setHudBackgroundOpacity(Math.max(0, Math.min(100, percent)) / 100.0f);
+    }
+
+    public float getHudElementsOpacity() {
+        return Math.max(0.10f, Math.min(1.0f, hudElementsOpacity));
+    }
+
+    public void setHudElementsOpacity(float hudElementsOpacity) {
+        this.hudElementsOpacity = Math.max(0.10f, Math.min(1.0f, hudElementsOpacity));
+        save();
+    }
+
+    public int getHudElementsOpacityPercent() {
+        return Math.round(getHudElementsOpacity() * 100.0f);
+    }
+
+    public void setHudElementsOpacityPercent(int percent) {
+        setHudElementsOpacity(Math.max(10, Math.min(100, percent)) / 100.0f);
+    }
+
+    public float getHudOpacity() {
+        return getHudBackgroundOpacity();
+    }
+
+    public void setHudOpacity(float hudOpacity) {
+        setHudBackgroundOpacity(hudOpacity);
+    }
+
     public int getHudOpacityPercent() {
-        return Math.round(getHudOpacity() * 100.0f);
+        return getHudBackgroundOpacityPercent();
     }
 
     public void setHudOpacityPercent(int percent) {
-        setHudOpacity(Math.max(0, Math.min(100, percent)) / 100.0f);
+        setHudBackgroundOpacityPercent(percent);
     }
 
     public String getCustomClientId() {
