@@ -40,11 +40,11 @@ import java.util.List;
 public class SpotifyScreen extends Screen {
 
     public enum Tab {
-        PLAYER("Player", "🎵", "Desktop media playback & controls"),
-        LYRICS("Lyrics", "📜", "Synchronized real-time song lyrics"),
-        QUEUE("Queue", "📑", "Next tracks & queue management"),
-        HUD_EDITOR("Hud Editor", "📐", "Live in-game HUD positioning & scaling"),
-        THEMES("Themes", "🎨", "Liquid glass atmosphere & accents"),
+        PLAYER("Player", "♪", "Desktop media playback & controls"),
+        LYRICS("Lyrics", "≡", "Synchronized real-time song lyrics"),
+        QUEUE("Queue", "≡+", "Next tracks & queue management"),
+        HUD_EDITOR("Hud Editor", "⊞", "Live in-game HUD positioning & scaling"),
+        THEMES("Themes", "✦", "Liquid glass atmosphere & accents"),
         SETTINGS("Settings", "⚙", "In-game HUD, 3D celestial sky & ducking");
 
         private final String title;
@@ -302,7 +302,7 @@ guiGraphics.pose().pushMatrix();
 
             // Tab Icon & Label
             int textColor = isActive ? ThemeManager.getAccent() : (hover ? 0xFFFFFFFF : ThemeManager.getTextSecondary());
-            guiGraphics.drawString(this.font, tab.getIcon(), tabX + 9, itemY + 8, textColor, true);
+            renderTabIcon(guiGraphics, tab, tabX + 9, itemY + 8, textColor);
             guiGraphics.drawString(this.font, tab.getTitle(), tabX + 27, itemY + 8, textColor, isActive);
         }
 
@@ -310,6 +310,42 @@ guiGraphics.pose().pushMatrix();
 
         // Vertical Glass Divider Seam between Sidebar and Content
         guiGraphics.fill(x + w, y + 8, x + w + 1, y + h - 8, 0x18FFFFFF);
+    }
+
+    
+    private void renderTabIcon(GuiGraphics g, Tab tab, int ix, int iy, int color) {
+        switch (tab) {
+            case PLAYER -> {
+                g.drawString(this.font, "♪", ix + 2, iy, color, false);
+            }
+            case LYRICS -> {
+                g.fill(ix + 1, iy + 2, ix + 11, iy + 3, color);
+                g.fill(ix + 1, iy + 5, ix + 10, iy + 6, color);
+                g.fill(ix + 1, iy + 8, ix + 7, iy + 9, color);
+            }
+            case QUEUE -> {
+                g.fill(ix + 1, iy + 2, ix + 11, iy + 3, color);
+                g.fill(ix + 1, iy + 5, ix + 11, iy + 6, color);
+                g.fill(ix + 1, iy + 8, ix + 8, iy + 9, color);
+                g.fill(ix + 9, iy + 7, ix + 12, iy + 10, color);
+            }
+            case HUD_EDITOR -> {
+                g.fill(ix + 1, iy + 1, ix + 13, iy + 2, color);
+                g.fill(ix + 1, iy + 10, ix + 13, iy + 11, color);
+                g.fill(ix + 1, iy + 2, ix + 2, iy + 10, color);
+                g.fill(ix + 12, iy + 2, ix + 13, iy + 10, color);
+                g.fill(ix + 3, iy + 3, ix + 8, iy + 6, color);
+            }
+            case THEMES -> {
+                g.drawString(this.font, "✦", ix + 2, iy, color, false);
+            }
+            case SETTINGS -> {
+                g.fill(ix + 1, iy + 3, ix + 12, iy + 4, color);
+                g.fill(ix + 4, iy + 2, ix + 6, iy + 5, color);
+                g.fill(ix + 1, iy + 8, ix + 12, iy + 9, color);
+                g.fill(ix + 8, iy + 7, ix + 10, iy + 10, color);
+            }
+        }
     }
 
     private void renderContentHeader(GuiGraphics guiGraphics, int mouseX, int mouseY) {
@@ -330,7 +366,13 @@ guiGraphics.pose().pushMatrix();
         int closeText = closeHover ? 0xFFFF5555 : 0xFFCBD5E1;
 
         AaRoundRect.draw(guiGraphics, closeX, closeY, closeSize, closeSize, closeSize / 2, closeBg, closeBorder);
-        guiGraphics.drawCenteredString(this.font, "✕", closeX + (closeSize / 2), closeY + 4, closeText);
+        int ccx = closeX + (closeSize / 2);
+        int ccy = closeY + (closeSize / 2);
+        guiGraphics.fill(ccx - 3, ccy - 3, ccx - 1, ccy - 1, closeText);
+        guiGraphics.fill(ccx + 2, ccy - 3, ccx + 4, ccy - 1, closeText);
+        guiGraphics.fill(ccx - 1, ccy - 1, ccx + 2, ccy + 2, closeText);
+        guiGraphics.fill(ccx - 3, ccy + 2, ccx - 1, ccy + 4, closeText);
+        guiGraphics.fill(ccx + 2, ccy + 2, ccx + 4, ccy + 4, closeText);
 
         // Hairline separator below header
         guiGraphics.fillGradient(contentX, modalY + 38, modalX + modalWidth - 12, modalY + 39, ThemeManager.getGlassEdge(), 0x05FFFFFF);
@@ -957,7 +999,7 @@ guiGraphics.pose().pushMatrix();
         renderRowHover(guiGraphics, contentX, r2Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r2Y, cardW, rowH));
         renderSettingLabel(guiGraphics, "Sky Lyrics Direction", "Direction: " + config.getSkyLyricsMode().getDisplayName(), contentX + 14, r2Y, buttonX);
         boolean skyDirHover = isMouseOver(mouseX, mouseY, buttonX, r2Y + 9, buttonW, 20);
-        renderButton(guiGraphics, config.getSkyLyricsMode().getDisplayName() + " ▾", buttonX, r2Y + 9, buttonW, 20, skyDirHover);
+        renderButton(guiGraphics, config.getSkyLyricsMode().getDisplayName() + " ▼", buttonX, r2Y + 9, buttonW, 20, skyDirHover);
         renderHairline(guiGraphics, contentX + 12, r2Y + rowH, cardW - 24);
 
         // Row 3: Sky Lyrics Scale (Slider + Badge)
@@ -987,7 +1029,7 @@ guiGraphics.pose().pushMatrix();
         renderRowHover(guiGraphics, contentX, r5Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r5Y, cardW, rowH));
         renderSettingLabel(guiGraphics, "Lyrics Typography", "Font for lyrics & UI", contentX + 14, r5Y, buttonX);
         boolean fontHover = isMouseOver(mouseX, mouseY, buttonX, r5Y + 9, buttonW, 20);
-        renderButton(guiGraphics, config.getLyricFont().getDisplayName() + " ▾", buttonX, r5Y + 9, buttonW, 20, fontHover);
+        renderButton(guiGraphics, config.getLyricFont().getDisplayName() + " ▼", buttonX, r5Y + 9, buttonW, 20, fontHover);
 
         curY += skyCardH + 16;
 
@@ -1341,13 +1383,31 @@ guiGraphics.pose().pushMatrix();
                 g.fill(cx + 3, cy - 4, cx + 5, cy + 5, color);
             }
             case "SHUF" -> {
-                g.drawCenteredString(this.font, "🔀", cx, cy - 4, color);
+                g.fill(cx - 5, cy - 3, cx - 2, cy - 2, color);
+                g.fill(cx - 2, cy - 2, cx + 1, cy + 1, color);
+                g.fill(cx + 1, cy + 1, cx + 4, cy + 2, color);
+                g.fill(cx - 5, cy + 2, cx - 2, cy + 1, color);
+                g.fill(cx - 2, cy + 1, cx + 1, cy - 2, color);
+                g.fill(cx + 1, cy - 2, cx + 4, cy - 3, color);
+                g.fill(cx + 3, cy - 5, cx + 5, cy - 2, color);
+                g.fill(cx + 3, cy + 1, cx + 5, cy + 4, color);
             }
             case "REP" -> {
-                g.drawCenteredString(this.font, "🔁", cx, cy - 4, color);
+                g.fill(cx - 4, cy - 4, cx + 4, cy - 3, color);
+                g.fill(cx - 4, cy + 3, cx + 4, cy + 4, color);
+                g.fill(cx - 4, cy - 3, cx - 3, cy + 1, color);
+                g.fill(cx + 3, cy - 1, cx + 4, cy + 3, color);
+                g.fill(cx + 2, cy - 6, cx + 4, cy - 4, color);
+                g.fill(cx - 4, cy + 4, cx - 2, cy + 6, color);
             }
             case "REP1" -> {
-                g.drawCenteredString(this.font, "🔂", cx, cy - 4, color);
+                g.fill(cx - 4, cy - 4, cx + 4, cy - 3, color);
+                g.fill(cx - 4, cy + 3, cx + 4, cy + 4, color);
+                g.fill(cx - 4, cy - 3, cx - 3, cy + 1, color);
+                g.fill(cx + 3, cy - 1, cx + 4, cy + 3, color);
+                g.fill(cx + 2, cy - 6, cx + 4, cy - 4, color);
+                g.fill(cx - 4, cy + 4, cx - 2, cy + 6, color);
+                g.fill(cx, cy - 2, cx + 1, cy + 2, color);
             }
             default -> {
                 g.drawCenteredString(this.font, type, cx, cy - 4, color);
