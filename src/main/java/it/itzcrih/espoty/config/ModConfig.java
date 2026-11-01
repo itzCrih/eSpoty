@@ -49,7 +49,8 @@ public class ModConfig {
 
     public enum SkyLyricsMode {
         FOLLOW_LOOK("Dynamic Gaze"),
-        NORTH_SOUTH("North & South");
+        NORTH_SOUTH("North & South"),
+        DYNAMIC_COMBAT("Dynamic Combat");
 
         private final String displayName;
 
@@ -63,6 +64,28 @@ public class ModConfig {
 
         public SkyLyricsMode next() {
             SkyLyricsMode[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum CombatAnimation {
+        POP_FLOAT("Pop & Float"),
+        WORD_FADE("Fade in Words"),
+        SLIDE_DRIFT("Slide & Drift"),
+        NEON_PULSE("Neon Pulse");
+
+        private final String displayName;
+
+        CombatAnimation(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public CombatAnimation next() {
+            CombatAnimation[] values = values();
             return values[(this.ordinal() + 1) % values.length];
         }
     }
@@ -112,6 +135,7 @@ public class ModConfig {
     private int hudAutoHideSeconds = 8;
     private boolean skyLyricsEnabled = true;
     private SkyLyricsMode skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
+    private CombatAnimation combatAnimation = CombatAnimation.POP_FLOAT;
     private float skyLyricsScale = 1.0f;
     private int skyLyricsLength = 5;
     private LyricFont lyricFont = LyricFont.MODERN;
@@ -165,6 +189,7 @@ public class ModConfig {
                     if (config.anonymousInstallId == null || config.anonymousInstallId.isEmpty()) config.anonymousInstallId = UUID.randomUUID().toString();
                     if (config.lyricFont == null) config.lyricFont = LyricFont.MODERN;
                     if (config.skyLyricsMode == null) config.skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
+                    if (config.combatAnimation == null) config.combatAnimation = CombatAnimation.POP_FLOAT;
                     if (config.themeLook == null) config.themeLook = ThemeLook.BOREALIS;
                     if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
                     if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
@@ -287,6 +312,15 @@ public class ModConfig {
 
     public void setSkyLyricsMode(SkyLyricsMode skyLyricsMode) {
         this.skyLyricsMode = skyLyricsMode != null ? skyLyricsMode : SkyLyricsMode.FOLLOW_LOOK;
+        save();
+    }
+
+    public CombatAnimation getCombatAnimation() {
+        return combatAnimation != null ? combatAnimation : CombatAnimation.POP_FLOAT;
+    }
+
+    public void setCombatAnimation(CombatAnimation combatAnimation) {
+        this.combatAnimation = combatAnimation != null ? combatAnimation : CombatAnimation.POP_FLOAT;
         save();
     }
 

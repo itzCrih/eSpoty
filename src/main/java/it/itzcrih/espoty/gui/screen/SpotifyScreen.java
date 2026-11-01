@@ -79,7 +79,7 @@ public class SpotifyScreen extends Screen {
 
     // Content total heights for exact scrolling boundaries
     private static final int THEMES_CONTENT_HEIGHT = 414;
-    private static final int SETTINGS_CONTENT_HEIGHT = 650;
+    private static final int SETTINGS_CONTENT_HEIGHT = 690;
 
     // Interactive slider dragging states
     private boolean isDraggingSeek = false;
@@ -982,7 +982,7 @@ guiGraphics.pose().pushMatrix();
         renderGroupHeader(guiGraphics, "CELESTIAL SKY LYRICS", contentX + 2, curY);
         curY += 15;
 
-        int skyGroupRows = 5;
+        int skyGroupRows = 6;
         int skyCardH = skyGroupRows * rowH;
         renderGroupCardBackground(guiGraphics, contentX, curY, cardW, skyCardH);
 
@@ -997,7 +997,7 @@ guiGraphics.pose().pushMatrix();
         // Row 2: Sky Lyrics Direction (Fixed removed completely!)
         int r2Y = curY + rowH;
         renderRowHover(guiGraphics, contentX, r2Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r2Y, cardW, rowH));
-        renderSettingLabel(guiGraphics, "Sky Lyrics Direction", "Direction: " + config.getSkyLyricsMode().getDisplayName(), contentX + 14, r2Y, buttonX);
+        renderSettingLabel(guiGraphics, "Sky Lyrics Mode", "Mode: " + config.getSkyLyricsMode().getDisplayName(), contentX + 14, r2Y, buttonX);
         boolean skyDirHover = isMouseOver(mouseX, mouseY, buttonX, r2Y + 9, buttonW, 20);
         renderButton(guiGraphics, config.getSkyLyricsMode().getDisplayName() + " ▼", buttonX, r2Y + 9, buttonW, 20, skyDirHover);
         renderHairline(guiGraphics, contentX + 12, r2Y + rowH, cardW - 24);
@@ -1030,6 +1030,14 @@ guiGraphics.pose().pushMatrix();
         renderSettingLabel(guiGraphics, "Lyrics Typography", "Font for lyrics & UI", contentX + 14, r5Y, buttonX);
         boolean fontHover = isMouseOver(mouseX, mouseY, buttonX, r5Y + 9, buttonW, 20);
         renderButton(guiGraphics, config.getLyricFont().getDisplayName() + " ▼", buttonX, r5Y + 9, buttonW, 20, fontHover);
+        renderHairline(guiGraphics, contentX + 12, r5Y + rowH, cardW - 24);
+
+        // Row 6: Combat Animation Style
+        int r6Y = curY + (rowH * 5);
+        renderRowHover(guiGraphics, contentX, r6Y, cardW, rowH, isMouseOver(mouseX, mouseY, contentX, r6Y, cardW, rowH));
+        renderSettingLabel(guiGraphics, "Combat Animation", "Animation: " + config.getCombatAnimation().getDisplayName(), contentX + 14, r6Y, buttonX);
+        boolean animHover = isMouseOver(mouseX, mouseY, buttonX, r6Y + 9, buttonW, 20);
+        renderButton(guiGraphics, config.getCombatAnimation().getDisplayName() + " ▼", buttonX, r6Y + 9, buttonW, 20, animHover);
 
         curY += skyCardH + 16;
 
@@ -1839,7 +1847,7 @@ guiGraphics.pose().pushMatrix();
         int r2Y = curY + rowH;
         if (isMouseOver(mx, my, buttonX, r2Y + 9, buttonW, 20)) {
             config.setSkyLyricsMode(config.getSkyLyricsMode().next());
-            setStatus("Sky Direction: " + config.getSkyLyricsMode().getDisplayName());
+            setStatus("Sky Mode: " + config.getSkyLyricsMode().getDisplayName());
             playClickSound();
             return;
         }
@@ -1873,7 +1881,16 @@ guiGraphics.pose().pushMatrix();
             return;
         }
 
-        curY += (5 * rowH) + 16;
+        // Row 6: Combat Animation Style
+        int r6Y = curY + (rowH * 5);
+        if (isMouseOver(mx, my, buttonX, r6Y + 9, buttonW, 20)) {
+            config.setCombatAnimation(config.getCombatAnimation().next());
+            setStatus("Combat Animation: " + config.getCombatAnimation().getDisplayName());
+            playClickSound();
+            return;
+        }
+
+        curY += (6 * rowH) + 16;
 
         // GROUP 2: IN-GAME HUD OVERLAY
         curY += 15;
