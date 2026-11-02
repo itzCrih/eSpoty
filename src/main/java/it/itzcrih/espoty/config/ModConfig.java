@@ -94,6 +94,7 @@ public class ModConfig {
         MODERN("Modern Sans", Identifier.fromNamespaceAndPath("espoty", "modern")),
         SPOTIFY_BOLD("Spotify Bold", Identifier.fromNamespaceAndPath("espoty", "bold")),
         MINECRAFT("Minecraft Pixel", Identifier.fromNamespaceAndPath("minecraft", "default")),
+        COOLFONT("PvP Coolfont", Identifier.fromNamespaceAndPath("espoty", "coolfont")),
         UNIFORM("Vanilla Smooth", Identifier.fromNamespaceAndPath("minecraft", "uniform")),
         MONOSPACE("Monospace", Identifier.fromNamespaceAndPath("espoty", "mono"));
 

@@ -526,12 +526,15 @@ public class SkyLyricsRenderer {
         final long startMs;
         final long endMs;
         final boolean isRightSide;
+        final long lingerDuration;
 
         // Static 3D World Origin
         final double worldX;
         final double worldY;
         final double worldZ;
         final long spawnRealTime;
+
+        boolean acceleratedFade = false;
 
         Active3DBillboard(
                 int chunkId,
@@ -555,6 +558,10 @@ public class SkyLyricsRenderer {
             this.worldY = worldY;
             this.worldZ = worldZ;
             this.spawnRealTime = spawnRealTime;
+
+            // Adaptive linger: fast rap (like Eminem - Godzilla) clears in 700-1100ms, ballads up to 2200ms
+            long span = Math.max(150L, endMs - startMs);
+            this.lingerDuration = Math.max(700L, Math.min(2200L, span * 2L + 250L));
         }
     }
 
@@ -637,8 +644,9 @@ public class SkyLyricsRenderer {
         while (it.hasNext()) {
             Active3DBillboard b = it.next();
 
-            // Total linger duration after singing ends: 2400ms (2.4s)
-            long lingerEnd = b.endMs + 2400L;
+            // Adaptive linger: accelerated when new lines arrive on the same side
+            long totalLinger = b.acceleratedFade ? Math.min(b.lingerDuration, 750L) : b.lingerDuration;
+            long lingerEnd = b.endMs + totalLinger;
             if (progressMs > lingerEnd) {
                 it.remove();
                 continue;
@@ -646,15 +654,16 @@ public class SkyLyricsRenderer {
 
             // Relative vector from current camera to static world billboard position
             float lifeSec = Math.max(0.0f, (progressMs - b.startMs) / 1000.0f);
+            float baseFloatSpeed = b.acceleratedFade ? 0.44f : 0.22f;
             double floatY;
             if (animMode == ModConfig.CombatAnimation.WORD_FADE) {
-                floatY = lifeSec * 0.16;
+                floatY = lifeSec * (baseFloatSpeed * 0.75f);
             } else if (animMode == ModConfig.CombatAnimation.SLIDE_DRIFT) {
-                floatY = lifeSec * 0.18;
+                floatY = lifeSec * (baseFloatSpeed * 0.85f);
             } else if (animMode == ModConfig.CombatAnimation.NEON_PULSE) {
-                floatY = lifeSec * 0.20;
+                floatY = lifeSec * (baseFloatSpeed * 0.95f);
             } else {
-                floatY = lifeSec * 0.22; // POP_FLOAT
+                floatY = lifeSec * baseFloatSpeed; // POP_FLOAT
             }
 
             double relX = b.worldX - camPos.x;
@@ -677,8 +686,8 @@ public class SkyLyricsRenderer {
             long timeSinceStart = progressMs - b.startMs;
             long timeSinceEnd = progressMs - b.endMs;
 
-            if (timeSinceStart < 220) {
-                float inT = Math.max(0.0f, Math.min(1.0f, (float) timeSinceStart / 220.0f));
+            if (timeSinceStart < 160) {
+                float inT = Math.max(0.0f, Math.min(1.0f, (float) timeSinceStart / 160.0f));
                 if (animMode == ModConfig.CombatAnimation.POP_FLOAT) {
                     alpha = inT * (2.0f - inT); // ease-out quad
                     introPunch = 0.82f + (0.18f * alpha);
@@ -695,11 +704,11 @@ public class SkyLyricsRenderer {
                     introPunch = 0.88f + (0.12f * inT);
                 }
             } else if (timeSinceEnd > 0) {
-                float outT = Math.max(0.0f, Math.min(1.0f, 1.0f - ((float) timeSinceEnd / 2400.0f)));
+                float outT = Math.max(0.0f, Math.min(1.0f, 1.0f - ((float) timeSinceEnd / (float) totalLinger)));
                 alpha = outT * outT; // smooth quadratic fadeout
                 introPunch = 1.0f;
                 if (animMode == ModConfig.CombatAnimation.SLIDE_DRIFT) {
-                    float outProgress = (float) timeSinceEnd / 2400.0f;
+                    float outProgress = (float) timeSinceEnd / (float) totalLinger;
                     slideX = (b.isRightSide ? 14.0f : -14.0f) * (outProgress * outProgress);
                 }
             }
@@ -746,13 +755,29 @@ public class SkyLyricsRenderer {
         Vec3 up = right.cross(look).normalize();
 
         boolean isRightSide = chunk.isRightSide;
+
+        // Anti-collision staggering & smart clearing:
+        // When singing is extremely fast (e.g. Eminem - Godzilla), check existing billboards on the same side
+        float vertOffset = 0.0f;
+        int sameSideCount = 0;
+        for (Active3DBillboard existing : active3DBillboards) {
+            if (existing.isRightSide == isRightSide) {
+                sameSideCount++;
+                // Older billboard on this side accelerates upward float and clears out gracefully
+                existing.acceleratedFade = true;
+                // Alternate vertical height so consecutive phrases never compenetrate
+                vertOffset = (sameSideCount % 2 == 1) ? -0.42f : 0.42f;
+            }
+        }
+
         int hash = (chunk.chunkId * 0x45d9f3b) ^ (chunk.chunkId >> 16);
         int varY = Math.abs(hash) % 3;
 
-        // Position: 3.5m forward, 1.45m to the side, slight vertical jitter
-        float forwardDist = 3.5f + (Math.abs(hash >> 3) % 8) * 0.08f; // 3.5m to 4.1m
-        float sideDist = 1.40f + (Math.abs(hash >> 6) % 10) * 0.05f; // 1.40m to 1.90m
-        float vertDist = (varY == 0 ? 0.38f : (varY == 1 ? -0.05f : -0.36f)) + ((Math.abs(hash >> 9) % 6) * 0.04f);
+        // Position: 3.5m forward, 1.40m to the side, anti-collision vertical stagger
+        float forwardDist = 3.5f + (Math.abs(hash >> 3) % 8) * 0.06f;
+        float sideDist = 1.40f + (Math.abs(hash >> 6) % 10) * 0.04f;
+        float baseVert = (varY == 0 ? 0.30f : (varY == 1 ? -0.05f : -0.30f));
+        float vertDist = baseVert + vertOffset;
 
         Vec3 spawnPos = camPos.add(
                 look.scale(forwardDist)
@@ -772,6 +797,12 @@ public class SkyLyricsRenderer {
                 spawnPos.z,
                 now
         ));
+
+        // Enforce maximum concurrent active billboards cap (max 4 total: 2 left, 2 right)
+        // Eliminates visual clutter in ultra-fast songs like Godzilla
+        while (active3DBillboards.size() > 4) {
+            active3DBillboards.remove(0);
+        }
     }
 
     private static void render3DWords(
@@ -976,26 +1007,44 @@ public class SkyLyricsRenderer {
                 } else {
                     lineEnd = lineStart + 3500L;
                 }
-                long lineDuration = Math.max(1000L, Math.min(8000L, lineEnd - lineStart));
+                long actualLineDuration = lineEnd - lineStart;
+                long lineDuration = Math.max(250L, Math.min(8000L, actualLineDuration));
 
                 // Split into uppercase words
                 String[] words = raw.toUpperCase(Locale.ROOT).split("\\s+");
                 if (words.length == 0) continue;
 
-                // Group into punchy chunks of 2 to 4 words
-                List<List<String>> chunkedWordGroups = partitionWords(words);
+                // For very fast lines (Godzilla rap speeds) or short phrases (<= 4 words),
+                // keep the whole line in 1 chunk to prevent overlapping micro-phrases!
+                List<List<String>> chunkedWordGroups;
+                if (words.length <= 4 || lineDuration < 1200L) {
+                    List<String> singleChunk = new ArrayList<>();
+                    for (String w : words) singleChunk.add(w);
+                    chunkedWordGroups = new ArrayList<>();
+                    chunkedWordGroups.add(singleChunk);
+                } else {
+                    chunkedWordGroups = partitionWords(words);
+                }
+
                 int totalWordsInLine = words.length;
                 long curChunkStart = lineStart;
 
-                for (List<String> group : chunkedWordGroups) {
+                for (int g = 0; g < chunkedWordGroups.size(); g++) {
+                    List<String> group = chunkedWordGroups.get(g);
                     float ratio = (float) group.size() / (float) totalWordsInLine;
-                    long chunkDuration = Math.max(700L, (long) (lineDuration * ratio));
-                    long chunkEnd = curChunkStart + chunkDuration;
+                    long chunkDuration = Math.max(200L, (long) (lineDuration * ratio));
+                    // Never let chunkEnd bleed past lineEnd
+                    long chunkEnd = (g == chunkedWordGroups.size() - 1 && i + 1 < lines.size())
+                            ? Math.min(lineEnd, curChunkStart + chunkDuration)
+                            : (curChunkStart + chunkDuration);
+                    if (chunkEnd <= curChunkStart) {
+                        chunkEnd = curChunkStart + 200L;
+                    }
 
                     List<CombatWord> combatWords = new ArrayList<>();
                     int groupTotalW = 0;
                     long curWordStart = curChunkStart;
-                    long wordDuration = chunkDuration / group.size();
+                    long wordDuration = Math.max(40L, (chunkEnd - curChunkStart) / group.size());
 
                     for (int w = 0; w < group.size(); w++) {
                         String wordStr = group.get(w);
@@ -1030,16 +1079,26 @@ public class SkyLyricsRenderer {
                 int globalChunkId = 0;
                 for (int i = 0; i < validLines.size(); i++) {
                     long lineStart = i * lineSpan;
+                    long lineEnd = (i + 1) * lineSpan;
                     String[] words = validLines.get(i).split("\\s+");
-                    List<List<String>> groups = partitionWords(words);
+                    List<List<String>> groups;
+                    if (words.length <= 4 || lineSpan < 1200L) {
+                        List<String> singleChunk = new ArrayList<>();
+                        for (String w : words) singleChunk.add(w);
+                        groups = new ArrayList<>();
+                        groups.add(singleChunk);
+                    } else {
+                        groups = partitionWords(words);
+                    }
                     long curChunkStart = lineStart;
-                    for (List<String> group : groups) {
+                    for (int g = 0; g < groups.size(); g++) {
+                        List<String> group = groups.get(g);
                         long cDuration = lineSpan / groups.size();
-                        long cEnd = curChunkStart + cDuration;
+                        long cEnd = (g == groups.size() - 1) ? lineEnd : (curChunkStart + cDuration);
                         List<CombatWord> combatWords = new ArrayList<>();
                         int groupTotalW = 0;
                         long curWStart = curChunkStart;
-                        long wDuration = cDuration / group.size();
+                        long wDuration = Math.max(40L, (cEnd - curWStart) / group.size());
                         for (int w = 0; w < group.size(); w++) {
                             String wordStr = group.get(w);
                             Component wordComp = Component.literal(wordStr).withStyle(style);
