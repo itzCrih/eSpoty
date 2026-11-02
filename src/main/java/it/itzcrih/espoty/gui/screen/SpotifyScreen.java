@@ -364,7 +364,7 @@ guiGraphics.pose().pushMatrix();
         int closeBorder = closeHover ? 0xFFFF4444 : 0x28FFFFFF;
         int closeText = closeHover ? 0xFFFF5555 : 0xFFCBD5E1;
 
-        AaRoundRect.draw(guiGraphics, closeX, closeY, closeSize, closeSize, closeSize / 2, closeBg, closeBorder);
+        RenderUtils.drawSmoothCircle(guiGraphics, closeX, closeY, closeSize, closeSize, closeBg, closeBorder);
         int ccx = closeX + (closeSize / 2);
         int ccy = closeY + (closeSize / 2);
         RenderUtils.drawTintedIcon(guiGraphics, ICON_CTRL_CLOSE, ccx - 4, ccy - 4, 8, closeText);
@@ -464,7 +464,7 @@ guiGraphics.pose().pushMatrix();
 
         // Pure white circular knob
         int seekKnobX = seekX + seekFillW;
-        AaRoundRect.draw(guiGraphics, seekKnobX - 5, seekY - 3, 10, 10, 5, 0xFFFFFFFF, seekHover ? accent2 : 0x40000000);
+        RenderUtils.drawSmoothCircle(guiGraphics, seekKnobX - 5, seekY - 3, 10, 10, 0xFFFFFFFF, seekHover ? accent2 : 0x40000000);
 
         // Time timestamps below seek bar
         String curTime = PlaybackState.formatTime(progressMs);
@@ -507,7 +507,7 @@ guiGraphics.pose().pushMatrix();
         boolean canPlay = state.canPlayPause();
         boolean playHover = isMouseOver(mouseX, mouseY, playX, playY, playSize, playSize);
         int playBg = playHover ? accent2 : accent;
-        AaRoundRect.draw(guiGraphics, playX, playY, playSize, playSize, playSize / 2, playBg, 0);
+        RenderUtils.drawSmoothCircle(guiGraphics, playX, playY, playSize, playSize, playBg, 0);
         String playIconType = state.isPlaying() ? "PAUSE" : "PLAY";
         renderControlIcon(guiGraphics, playIconType, centerX, centerY, 0xFF0B0F19);
 
@@ -546,7 +546,7 @@ guiGraphics.pose().pushMatrix();
         if (volFill > 0) {
             AaRoundRect.draw(guiGraphics, volBarX, volY, Math.max(4, volFill), 4, 2, accent, 0);
         }
-        AaRoundRect.draw(guiGraphics, volBarX + volFill - 4, volY - 2, 8, 8, 4, 0xFFFFFFFF, volHover ? accent : 0);
+        RenderUtils.drawSmoothCircle(guiGraphics, volBarX + volFill - 4, volY - 2, 8, 8, 0xFFFFFFFF, volHover ? accent : 0);
 
         String volText = curVol + "%";
         guiGraphics.drawString(this.font, volText, volBarX + volBarW + 8, volY - 2, ThemeManager.getTextSecondary(), false);
@@ -1346,7 +1346,7 @@ guiGraphics.pose().pushMatrix();
         int bg = active ? ThemeManager.getAccentDim(0.35f) : (hover ? 0x24FFFFFF : 0x0DFFFFFF);
         int border = active ? ThemeManager.getAccent() : (hover ? ThemeManager.applyAlpha(ThemeManager.getAccent(), 0.60f) : 0x22FFFFFF);
 
-        AaRoundRect.draw(g, x, y, w, h, Math.min(w, h) / 2, bg, border);
+        RenderUtils.drawSmoothCircle(g, x, y, w, h, bg, border);
 
         int cx = x + (w / 2);
         int cy = y + (h / 2);

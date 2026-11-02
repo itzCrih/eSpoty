@@ -138,8 +138,8 @@ public class ModConfig {
     private SkyLyricsMode skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
     private CombatAnimation combatAnimation = CombatAnimation.POP_FLOAT;
     private float skyLyricsScale = 1.0f;
-    private int skyLyricsLength = 5;
-    private LyricFont lyricFont = LyricFont.MODERN;
+    private int skyLyricsLength = 3;
+    private LyricFont lyricFont = LyricFont.COOLFONT;
     private ThemeLook themeLook = ThemeLook.BOREALIS;
     private ThemeAccent themeAccent = ThemeAccent.MATCH_THEME;
     private float glassOpacity = 0.90f;
@@ -188,9 +188,10 @@ public class ModConfig {
                 if (config != null) {
                     if (config.likedTracks == null) config.likedTracks = new HashSet<>();
                     if (config.anonymousInstallId == null || config.anonymousInstallId.isEmpty()) config.anonymousInstallId = UUID.randomUUID().toString();
-                    if (config.lyricFont == null) config.lyricFont = LyricFont.MODERN;
+                    if (config.lyricFont == null) config.lyricFont = LyricFont.COOLFONT;
                     if (config.skyLyricsMode == null) config.skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
                     if (config.combatAnimation == null) config.combatAnimation = CombatAnimation.POP_FLOAT;
+                    if (config.skyLyricsLength <= 0) config.skyLyricsLength = 3;
                     if (config.themeLook == null) config.themeLook = ThemeLook.BOREALIS;
                     if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
                     if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
@@ -352,11 +353,11 @@ public class ModConfig {
     }
 
     public LyricFont getLyricFont() {
-        return lyricFont != null ? lyricFont : LyricFont.MODERN;
+        return lyricFont != null ? lyricFont : LyricFont.COOLFONT;
     }
 
     public void setLyricFont(LyricFont lyricFont) {
-        this.lyricFont = lyricFont != null ? lyricFont : LyricFont.MODERN;
+        this.lyricFont = lyricFont != null ? lyricFont : LyricFont.COOLFONT;
         save();
     }
 

@@ -559,9 +559,9 @@ public class SkyLyricsRenderer {
             this.worldZ = worldZ;
             this.spawnRealTime = spawnRealTime;
 
-            // Adaptive linger: fast rap (like Eminem - Godzilla) clears in 700-1100ms, ballads up to 2200ms
+            // Adaptive linger: fast rap clears in 750-1200ms, melodic phrases/ballads linger up to 2800ms
             long span = Math.max(150L, endMs - startMs);
-            this.lingerDuration = Math.max(700L, Math.min(2200L, span * 2L + 250L));
+            this.lingerDuration = Math.max(850L, Math.min(2800L, span * 2L + 300L));
         }
     }
 
@@ -629,7 +629,7 @@ public class SkyLyricsRenderer {
         // When progress reaches a chunk's start window, spawn it into the 3D world
         // anchored at the player's CURRENT camera position and look direction!
         for (CombatChunk chunk : cachedCombatChunks) {
-            if (progressMs >= chunk.startMs - 50 && progressMs <= chunk.endMs + 300) {
+            if (progressMs >= chunk.startMs - 350 && progressMs <= chunk.endMs + 300) {
                 if (!spawnedChunkIds.contains(chunk.chunkId)) {
                     spawnChunkIn3DWorld(camera, camPos, chunk, now);
                     spawnedChunkIds.add(chunk.chunkId);
@@ -830,11 +830,12 @@ public class SkyLyricsRenderer {
             pulseFactor = (float) (Math.sin((now % 10000L) * 0.007) * 0.28 + 0.95);
         }
 
+        long beatSyncProgress = progressMs + 100L; // 100ms vocal onset lead time aligns highlighting right on the beat
         for (int i = 0; i < b.words.size(); i++) {
             CombatWord word = b.words.get(i);
 
-            boolean isActive = (progressMs >= word.startMs && progressMs < word.endMs);
-            boolean isPast = (progressMs >= word.endMs);
+            boolean isActive = (beatSyncProgress >= word.startMs && beatSyncProgress < word.endMs);
+            boolean isPast = (beatSyncProgress >= word.endMs);
 
             int coreColor;
             int glowRgb;
@@ -849,7 +850,7 @@ public class SkyLyricsRenderer {
                 glowStrength = 1.05f * pulseFactor;
 
                 // Word onset bump or fade
-                float wordProgress = (float) (progressMs - word.startMs) / (float) Math.max(1L, word.endMs - word.startMs);
+                float wordProgress = (float) (beatSyncProgress - word.startMs) / (float) Math.max(1L, word.endMs - word.startMs);
                 if (animMode == ModConfig.CombatAnimation.POP_FLOAT && wordProgress < 0.22f) {
                     float p = 1.0f - (wordProgress / 0.22f);
                     wordScale = 1.0f + (0.09f * p * p);
@@ -857,7 +858,7 @@ public class SkyLyricsRenderer {
                     wordScale = 1.0f + (0.04f * pulseFactor);
                 } else if (animMode == ModConfig.CombatAnimation.WORD_FADE) {
                     // Smooth word-by-word fade in over 150ms
-                    float fadeElapsed = (float) (progressMs - word.startMs);
+                    float fadeElapsed = (float) (beatSyncProgress - word.startMs);
                     if (fadeElapsed < 150.0f) {
                         float wFadeT = Math.max(0.0f, Math.min(1.0f, fadeElapsed / 150.0f));
                         wordAlpha *= wFadeT;
@@ -1008,16 +1009,23 @@ public class SkyLyricsRenderer {
                     lineEnd = lineStart + 3500L;
                 }
                 long actualLineDuration = lineEnd - lineStart;
-                long lineDuration = Math.max(250L, Math.min(8000L, actualLineDuration));
 
                 // Split into uppercase words
                 String[] words = raw.toUpperCase(Locale.ROOT).split("\\s+");
                 if (words.length == 0) continue;
 
+                // Natural singing cadence estimation:
+                // Humans sing at ~240ms to 420ms per word depending on length.
+                // Do NOT stretch words across long instrumental breaks (e.g. 7-second guitar gaps)!
+                int totalChars = 0;
+                for (String w : words) totalChars += w.length();
+                long naturalSingingDuration = 220L + (totalChars * 52L) + (words.length * 120L);
+                long lineSingingDuration = Math.min(actualLineDuration, Math.max(350L, naturalSingingDuration));
+
                 // For very fast lines (Godzilla rap speeds) or short phrases (<= 4 words),
                 // keep the whole line in 1 chunk to prevent overlapping micro-phrases!
                 List<List<String>> chunkedWordGroups;
-                if (words.length <= 4 || lineDuration < 1200L) {
+                if (words.length <= 4 || actualLineDuration < 1200L || lineSingingDuration < 1200L) {
                     List<String> singleChunk = new ArrayList<>();
                     for (String w : words) singleChunk.add(w);
                     chunkedWordGroups = new ArrayList<>();
@@ -1032,25 +1040,37 @@ public class SkyLyricsRenderer {
                 for (int g = 0; g < chunkedWordGroups.size(); g++) {
                     List<String> group = chunkedWordGroups.get(g);
                     float ratio = (float) group.size() / (float) totalWordsInLine;
-                    long chunkDuration = Math.max(200L, (long) (lineDuration * ratio));
+                    long chunkDuration = Math.max(180L, (long) (lineSingingDuration * ratio));
                     // Never let chunkEnd bleed past lineEnd
                     long chunkEnd = (g == chunkedWordGroups.size() - 1 && i + 1 < lines.size())
                             ? Math.min(lineEnd, curChunkStart + chunkDuration)
                             : (curChunkStart + chunkDuration);
                     if (chunkEnd <= curChunkStart) {
-                        chunkEnd = curChunkStart + 200L;
+                        chunkEnd = curChunkStart + 180L;
                     }
+
+                    // Syllable/char-weighted word durations for natural musical rhythm:
+                    int groupChars = 0;
+                    for (String w : group) groupChars += Math.max(2, w.length());
 
                     List<CombatWord> combatWords = new ArrayList<>();
                     int groupTotalW = 0;
                     long curWordStart = curChunkStart;
-                    long wordDuration = Math.max(40L, (chunkEnd - curChunkStart) / group.size());
+                    long remainingTime = chunkEnd - curChunkStart;
 
                     for (int w = 0; w < group.size(); w++) {
                         String wordStr = group.get(w);
                         Component wordComp = Component.literal(wordStr).withStyle(style);
                         int wWidth = font.width(wordComp);
-                        long wEnd = (w == group.size() - 1) ? chunkEnd : (curWordStart + wordDuration);
+
+                        int wordWeight = Math.max(2, wordStr.length());
+                        long wDuration;
+                        if (w == group.size() - 1) {
+                            wDuration = Math.max(35L, chunkEnd - curWordStart);
+                        } else {
+                            wDuration = Math.max(35L, (remainingTime * wordWeight) / groupChars);
+                        }
+                        long wEnd = Math.min(chunkEnd, curWordStart + wDuration);
                         combatWords.add(new CombatWord(wordStr, wordComp, wWidth, curWordStart, wEnd));
                         groupTotalW += wWidth;
                         if (w < group.size() - 1) {

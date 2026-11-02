@@ -13,7 +13,26 @@ import net.minecraft.resources.Identifier;
  */
 public final class RenderUtils {
 
+    private static final Identifier ICON_CIRCLE_FILL = Identifier.fromNamespaceAndPath("espoty", "textures/ui/circle_fill.png");
+    private static final Identifier ICON_CIRCLE_RING = Identifier.fromNamespaceAndPath("espoty", "textures/ui/circle_ring.png");
+
     private RenderUtils() {}
+
+    /**
+     * Renders a perfectly anti-aliased, silky-smooth circular button/knob background and border.
+     */
+    public static void drawSmoothCircle(GuiGraphics g, int x, int y, int size, int fillColor, int borderColor) {
+        drawSmoothCircle(g, x, y, size, size, fillColor, borderColor);
+    }
+
+    public static void drawSmoothCircle(GuiGraphics g, int x, int y, int width, int height, int fillColor, int borderColor) {
+        if ((fillColor & 0xFF000000) != 0) {
+            drawTintedIcon(g, ICON_CIRCLE_FILL, x, y, width, height, fillColor);
+        }
+        if ((borderColor & 0xFF000000) != 0) {
+            drawTintedIcon(g, ICON_CIRCLE_RING, x, y, width, height, borderColor);
+        }
+    }
 
     /**
      * Renders a high-resolution texture icon with precise ARGB tinting and alpha blending.
