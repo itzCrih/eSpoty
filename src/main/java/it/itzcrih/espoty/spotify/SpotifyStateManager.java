@@ -55,10 +55,8 @@ public class SpotifyStateManager {
             return t;
         });
 
-        // Launch bi-directional Windows SMTC Bridge
         windowsBridge.start();
 
-        // Optional Web API polling if user authorized
         startWebPolling();
     }
 
@@ -94,9 +92,6 @@ public class SpotifyStateManager {
         } catch (Exception ignored) {}
     }
 
-    /**
-     * Called in real-time by WindowsMediaBridge via TCP socket.
-     */
     public synchronized void updateLocalState(boolean running, String title, String artist, String album,
                                              long pos, long dur, boolean playing, boolean shuffle, String repeat,
                                              int volumePercent, String artUrl, boolean liked,
@@ -123,7 +118,7 @@ public class SpotifyStateManager {
                 AlbumArtManager.getInstance().getAlbumTexture(artUrl);
             } else {
                 this.currentArtworkUrl = "";
-                // Fallback to iTunes query if not provided by CLI
+                
                 ArtworkFinder.getInstance().findArtworkUrl(title, artist).thenAccept(foundArt -> {
                     synchronized (SpotifyStateManager.this) {
                         if (foundArt != null && !foundArt.isEmpty()) {
@@ -138,7 +133,6 @@ public class SpotifyStateManager {
             AlbumArtManager.getInstance().getAlbumTexture(artUrl);
         }
 
-        // Anchor progress to timestamp
         this.stateFetchTimestamp = System.currentTimeMillis();
 
         int effectiveVol = (volumePercent >= 0)
@@ -201,9 +195,6 @@ public class SpotifyStateManager {
         return lastTrackChangeTime;
     }
 
-    /**
-     * Calculates client-interpolated playback progress.
-     */
     public long getInterpolatedProgressMs() {
         PlaybackState s = currentState;
         if (s == null) return 0;
@@ -315,7 +306,6 @@ public class SpotifyStateManager {
         return currentQueue;
     }
 
-    // Direct Playback Controls
     public void togglePlayPause() {
         windowsBridge.sendCommand("toggle");
         if (auth.isAuthenticated()) {

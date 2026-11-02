@@ -52,7 +52,7 @@ public class ArtworkFinder {
             try {
                 String term = title;
                 if (artist != null && !artist.isEmpty()) {
-                    // Use first artist
+                    
                     String firstArtist = artist.split(",")[0].trim();
                     term = firstArtist + " " + title;
                 }
@@ -77,7 +77,7 @@ public class ArtworkFinder {
                             JsonObject first = results.get(0).getAsJsonObject();
                             if (first.has("artworkUrl100")) {
                                 String art = first.get("artworkUrl100").getAsString();
-                                // Upgrade to 600x600 HD cover
+                                
                                 art = art.replace("100x100bb", "600x600bb");
                                 cache.put(key, art);
                                 return art;

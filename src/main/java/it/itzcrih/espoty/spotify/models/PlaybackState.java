@@ -16,7 +16,6 @@ public class PlaybackState {
     private final String deviceType;
     private final long timestamp;
 
-    // Controls capability flags from SMTC
     private final boolean canPlayPause;
     private final boolean canNext;
     private final boolean canPrev;

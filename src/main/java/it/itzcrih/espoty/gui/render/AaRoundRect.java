@@ -2,11 +2,6 @@ package it.itzcrih.espoty.gui.render;
 
 import net.minecraft.client.gui.GuiGraphics;
 
-/**
- * High-performance anti-aliased rounded rectangle renderer.
- * Uses direct geometric batch fills with zero texture allocations or VRAM churn,
- * guaranteeing identical, glitch-free visuals across all Minecraft versions.
- */
 public final class AaRoundRect {
 
     public static void draw(GuiGraphics g, int x, int y, int w, int h, int radius, int argb) {
@@ -26,12 +21,10 @@ public final class AaRoundRect {
         boolean hasFill = (argb & 0xFF000000) != 0;
         boolean hasBorder = (border & 0xFF000000) != 0;
 
-        // 1. Central body fill between corner arcs
         if (hasFill && h > 2 * r) {
             g.fill(x, y + r, x + w, y + h - r, argb);
         }
 
-        // 2. Corner slices (top and bottom)
         for (int dy = 0; dy < r; dy++) {
             float fy = r - (dy + 0.5f);
             float fx = (float) Math.sqrt(Math.max(0.0f, r * r - fy * fy));
@@ -40,7 +33,6 @@ public final class AaRoundRect {
             int topY = y + dy;
             int botY = y + h - 1 - dy;
 
-            // Fill row
             if (hasFill) {
                 int fillX1 = x + inset;
                 int fillX2 = x + w - inset;
@@ -52,7 +44,6 @@ public final class AaRoundRect {
                 }
             }
 
-            // Outer corner border pixels
             if (hasBorder) {
                 int bLeft = x + inset;
                 int bRight = x + w - inset - 1;
@@ -65,15 +56,13 @@ public final class AaRoundRect {
             }
         }
 
-        // 3. Straight borders connecting the corners
         if (hasBorder) {
-            // Top and bottom horizontal borders
+            
             if (w > 2 * r) {
                 g.fill(x + r, y, x + w - r, y + 1, border);
                 g.fill(x + r, y + h - 1, x + w - r, y + h, border);
             }
 
-            // Left and right vertical borders
             if (h > 2 * r) {
                 g.fill(x, y + r, x + 1, y + h - r, border);
                 g.fill(x + w - 1, y + r, x + w, y + h - r, border);
@@ -94,6 +83,6 @@ public final class AaRoundRect {
     }
 
     public static void clearCache() {
-        // Direct geometric renderer - zero cached textures needed
+        
     }
 }

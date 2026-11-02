@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 public class SpotifyAuth {
-    // Default public client ID for eSpoty / open desktop client
+    
     public static final String DEFAULT_CLIENT_ID = "c78c85ebda32454f85e492b4526279f1";
     private static final String SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize";
     private static final String SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -159,7 +159,6 @@ public class SpotifyAuth {
                 message = "Unknown error occurred during authorization callback.";
             }
 
-            // Auth callback response HTML
             String responseHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
                     "<title>eSpoty - Spotify Integration</title>" +
                     "<style>" +
@@ -192,7 +191,6 @@ public class SpotifyAuth {
                 notifyAuthListeners(false);
             }
 
-            // Stop server shortly after
             new Thread(() -> {
                 try {
                     Thread.sleep(1500);
@@ -252,12 +250,11 @@ public class SpotifyAuth {
 
     public synchronized CompletableFuture<String> getValidAccessToken() {
         long now = System.currentTimeMillis();
-        // If access token is valid for at least another 60 seconds
+        
         if (accessToken != null && !accessToken.isEmpty() && now < (expiresAt - 60000)) {
             return CompletableFuture.completedFuture(accessToken);
         }
 
-        // Needs refresh
         if (refreshToken != null && !refreshToken.isEmpty()) {
             return refreshAccessToken();
         }

@@ -1,0 +1,581 @@
+package it.itzcrih.espoty.config;
+
+import it.itzcrih.espoty.ESpotyMod;
+import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeAccent;
+import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeLook;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+public class ModConfig {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final File CONFIG_FILE = FabricLoader.getInstance().getConfigDir().resolve("espoty/config.json").toFile();
+    private static ModConfig INSTANCE;
+
+    public enum HudPosition {
+        TOP_LEFT("Top Left"),
+        TOP_RIGHT("Top Right"),
+        BOTTOM_LEFT("Bottom Left"),
+        BOTTOM_RIGHT("Bottom Right"),
+        CUSTOM("Custom (Editor)"),
+        OFF("Disabled");
+
+        private final String displayName;
+
+        HudPosition(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public HudPosition next() {
+            HudPosition[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum SkyLyricsMode {
+        FOLLOW_LOOK("Dynamic Gaze"),
+        NORTH_SOUTH("North & South"),
+        DYNAMIC_COMBAT("Dynamic Combat");
+
+        private final String displayName;
+
+        SkyLyricsMode(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public SkyLyricsMode next() {
+            SkyLyricsMode[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum CombatAnimation {
+        POP_FLOAT("Pop & Float"),
+        WORD_FADE("Fade in Words"),
+        SLIDE_DRIFT("Slide & Drift"),
+        NEON_PULSE("Neon Pulse");
+
+        private final String displayName;
+
+        CombatAnimation(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public CombatAnimation next() {
+            CombatAnimation[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum LyricFont {
+        MODERN("Modern Sans", new ResourceLocation("espoty", "modern")),
+        SPOTIFY_BOLD("Spotify Bold", new ResourceLocation("espoty", "bold")),
+        MINECRAFT("Minecraft Pixel", new ResourceLocation("minecraft", "default")),
+        COOLFONT("PvP Coolfont", new ResourceLocation("espoty", "coolfont")),
+        UNIFORM("Vanilla Smooth", new ResourceLocation("minecraft", "uniform")),
+        MONOSPACE("Monospace", new ResourceLocation("espoty", "mono"));
+
+        private final String displayName;
+        private final ResourceLocation fontId;
+
+        LyricFont(String displayName, ResourceLocation fontId) {
+            this.displayName = displayName;
+            this.fontId = fontId;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public ResourceLocation getFontId() {
+            return fontId;
+        }
+
+        public Style getStyle() {
+            if ("minecraft".equals(fontId.getNamespace()) && "default".equals(fontId.getPath())) {
+                return Style.EMPTY;
+            }
+            return Style.EMPTY.withFont(fontId);
+        }
+
+        public LyricFont next() {
+            LyricFont[] values = values();
+            return values[(this.ordinal() + 1) % values.length];
+        }
+    }
+
+    private boolean enabled = true;
+    private HudPosition hudPosition = HudPosition.TOP_RIGHT;
+    private boolean hudShowLyrics = true;
+    private boolean hudCompact = false;
+    private boolean hudAutoHide = false;
+    private int hudAutoHideSeconds = 8;
+    private boolean skyLyricsEnabled = true;
+    private SkyLyricsMode skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
+    private CombatAnimation combatAnimation = CombatAnimation.POP_FLOAT;
+    private float skyLyricsScale = 1.0f;
+    private int skyLyricsLength = 3;
+    private LyricFont lyricFont = LyricFont.COOLFONT;
+    private ThemeLook themeLook = ThemeLook.BOREALIS;
+    private ThemeAccent themeAccent = ThemeAccent.MATCH_THEME;
+    private float glassOpacity = 0.90f;
+    private boolean syncHudTheme = true;
+    private float hudScale = 1.0f;
+    private int hudCustomX = -1;
+    private int hudCustomY = -1;
+    private float hudOpacity = 0.85f;
+    private float hudBackgroundOpacity = 0.85f;
+    private float hudElementsOpacity = 1.0f;
+    private String customClientId = "";
+    private int volume = 80;
+    private int volumeStep = 5;
+    private boolean showChatFeedback = true;
+    private boolean audioDuckingEnabled = true;
+    private float duckingMultiplier = 0.35f;
+    private boolean checkForUpdates = true;
+    private Set<String> likedTracks = new HashSet<>();
+    private String anonymousInstallId = UUID.randomUUID().toString();
+    private boolean metricsEnabled = true;
+
+    public static final int COLOR_GOLD_PRIMARY = 0xFFFFD700;   
+    public static final int COLOR_GOLD_SECONDARY = 0xFFE5A910; 
+    public static final int COLOR_YELLOW_ACCENT = 0xFFFFF066;  
+    public static final int COLOR_YELLOW_BRIGHT = 0xFFFFF59D;  
+    public static final int COLOR_BG_DARK = 0xF20D0D14;        
+    public static final int COLOR_BG_CARD = 0xF411111A;        
+    public static final int COLOR_BORDER_GOLD = 0x88FFD700;    
+    public static final int COLOR_TEXT_MUTED = 0xFFAAAAAA;     
+    public static final int COLOR_DISABLED = 0xFF555566;       
+    public static final int COLOR_SUCCESS = 0xFF00E676;        
+    public static final int COLOR_ERROR = 0xFFFF5252;          
+
+    public static ModConfig getInstance() {
+        if (INSTANCE == null) {
+            INSTANCE = load();
+        }
+        return INSTANCE;
+    }
+
+    public static ModConfig load() {
+        if (CONFIG_FILE.exists()) {
+            try (FileReader reader = new FileReader(CONFIG_FILE)) {
+                ModConfig config = GSON.fromJson(reader, ModConfig.class);
+                if (config != null) {
+                    if (config.likedTracks == null) config.likedTracks = new HashSet<>();
+                    if (config.anonymousInstallId == null || config.anonymousInstallId.isEmpty()) config.anonymousInstallId = UUID.randomUUID().toString();
+                    if (config.lyricFont == null) config.lyricFont = LyricFont.COOLFONT;
+                    if (config.skyLyricsMode == null) config.skyLyricsMode = SkyLyricsMode.FOLLOW_LOOK;
+                    if (config.combatAnimation == null) config.combatAnimation = CombatAnimation.POP_FLOAT;
+                    if (config.skyLyricsLength <= 0) config.skyLyricsLength = 3;
+                    if (config.themeLook == null) config.themeLook = ThemeLook.BOREALIS;
+                    if (config.themeAccent == null) config.themeAccent = ThemeAccent.MATCH_THEME;
+                    if (config.glassOpacity <= 0.05f) config.glassOpacity = 0.90f;
+                    if (config.hudBackgroundOpacity <= 0f && config.hudOpacity > 0f) {
+                        config.hudBackgroundOpacity = config.hudOpacity;
+                    }
+                    if (config.hudElementsOpacity <= 0.05f) {
+                        config.hudElementsOpacity = 1.0f;
+                    }
+                    return config;
+                }
+            } catch (Exception e) {
+                ESpotyMod.LOGGER.error("Failed to load config, falling back to defaults", e);
+            }
+        }
+        ModConfig config = new ModConfig();
+        config.save();
+        return config;
+    }
+
+    public void save() {
+        try {
+            File parent = CONFIG_FILE.getParentFile();
+            if (!parent.exists()) {
+                parent.mkdirs();
+            }
+            try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+                GSON.toJson(this, writer);
+            }
+        } catch (IOException e) {
+            ESpotyMod.LOGGER.error("Failed to save config", e);
+        }
+    }
+
+    public boolean isTrackLiked(String trackKey) {
+        return trackKey != null && likedTracks.contains(trackKey);
+    }
+
+    public boolean toggleTrackLiked(String trackKey) {
+        if (trackKey == null || trackKey.isEmpty()) return false;
+        boolean nowLiked;
+        if (likedTracks.contains(trackKey)) {
+            likedTracks.remove(trackKey);
+            nowLiked = false;
+        } else {
+            likedTracks.add(trackKey);
+            nowLiked = true;
+        }
+        save();
+        return nowLiked;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        save();
+    }
+
+    public HudPosition getHudPosition() {
+        return hudPosition;
+    }
+
+    public void setHudPosition(HudPosition hudPosition) {
+        this.hudPosition = hudPosition;
+        save();
+    }
+
+    public boolean isHudShowLyrics() {
+        return hudShowLyrics;
+    }
+
+    public void setHudShowLyrics(boolean hudShowLyrics) {
+        this.hudShowLyrics = hudShowLyrics;
+        save();
+    }
+
+    public boolean isHudCompact() {
+        return hudCompact;
+    }
+
+    public void setHudCompact(boolean hudCompact) {
+        this.hudCompact = hudCompact;
+        save();
+    }
+
+    public boolean isHudAutoHide() {
+        return hudAutoHide;
+    }
+
+    public void setHudAutoHide(boolean hudAutoHide) {
+        this.hudAutoHide = hudAutoHide;
+        save();
+    }
+
+    public int getHudAutoHideSeconds() {
+        return hudAutoHideSeconds;
+    }
+
+    public void setHudAutoHideSeconds(int hudAutoHideSeconds) {
+        this.hudAutoHideSeconds = hudAutoHideSeconds;
+        save();
+    }
+
+    public boolean isSkyLyricsEnabled() {
+        return skyLyricsEnabled;
+    }
+
+    public void setSkyLyricsEnabled(boolean skyLyricsEnabled) {
+        this.skyLyricsEnabled = skyLyricsEnabled;
+        save();
+    }
+
+    public SkyLyricsMode getSkyLyricsMode() {
+        return skyLyricsMode != null ? skyLyricsMode : SkyLyricsMode.FOLLOW_LOOK;
+    }
+
+    public void setSkyLyricsMode(SkyLyricsMode skyLyricsMode) {
+        this.skyLyricsMode = skyLyricsMode != null ? skyLyricsMode : SkyLyricsMode.FOLLOW_LOOK;
+        save();
+    }
+
+    public CombatAnimation getCombatAnimation() {
+        return combatAnimation != null ? combatAnimation : CombatAnimation.POP_FLOAT;
+    }
+
+    public void setCombatAnimation(CombatAnimation combatAnimation) {
+        this.combatAnimation = combatAnimation != null ? combatAnimation : CombatAnimation.POP_FLOAT;
+        save();
+    }
+
+    public float getSkyLyricsScale() {
+        return Math.max(0.5f, Math.min(2.0f, skyLyricsScale));
+    }
+
+    public void setSkyLyricsScale(float scale) {
+        this.skyLyricsScale = Math.max(0.5f, Math.min(2.0f, scale));
+        save();
+    }
+
+    public int getSkyLyricsScalePercent() {
+        return Math.round(getSkyLyricsScale() * 100.0f);
+    }
+
+    public void setSkyLyricsScalePercent(int percent) {
+        setSkyLyricsScale(Math.max(50, Math.min(200, percent)) / 100.0f);
+    }
+
+    public int getSkyLyricsLength() {
+        return Math.max(3, Math.min(25, skyLyricsLength));
+    }
+
+    public void setSkyLyricsLength(int length) {
+        this.skyLyricsLength = Math.max(3, Math.min(25, length));
+        save();
+    }
+
+    public LyricFont getLyricFont() {
+        return lyricFont != null ? lyricFont : LyricFont.COOLFONT;
+    }
+
+    public void setLyricFont(LyricFont lyricFont) {
+        this.lyricFont = lyricFont != null ? lyricFont : LyricFont.COOLFONT;
+        save();
+    }
+
+    public float getHudScale() {
+        return Math.max(0.5f, Math.min(1.5f, hudScale));
+    }
+
+    public void setHudScale(float hudScale) {
+        this.hudScale = Math.max(0.5f, Math.min(1.5f, hudScale));
+        save();
+    }
+
+    public int getHudScalePercent() {
+        return Math.round(getHudScale() * 100.0f);
+    }
+
+    public void setHudScalePercent(int percent) {
+        setHudScale(Math.max(50, Math.min(150, percent)) / 100.0f);
+    }
+
+    public int getHudCustomX() {
+        return hudCustomX;
+    }
+
+    public void setHudCustomX(int hudCustomX) {
+        this.hudCustomX = hudCustomX;
+        save();
+    }
+
+    public int getHudCustomY() {
+        return hudCustomY;
+    }
+
+    public void setHudCustomY(int hudCustomY) {
+        this.hudCustomY = hudCustomY;
+        save();
+    }
+
+    public void setHudCustomPosition(int x, int y) {
+        this.hudCustomX = x;
+        this.hudCustomY = y;
+        this.hudPosition = HudPosition.CUSTOM;
+        save();
+    }
+
+    public float getHudBackgroundOpacity() {
+        return Math.max(0.0f, Math.min(1.0f, hudBackgroundOpacity));
+    }
+
+    public void setHudBackgroundOpacity(float hudBackgroundOpacity) {
+        this.hudBackgroundOpacity = Math.max(0.0f, Math.min(1.0f, hudBackgroundOpacity));
+        this.hudOpacity = this.hudBackgroundOpacity;
+        save();
+    }
+
+    public int getHudBackgroundOpacityPercent() {
+        return Math.round(getHudBackgroundOpacity() * 100.0f);
+    }
+
+    public void setHudBackgroundOpacityPercent(int percent) {
+        setHudBackgroundOpacity(Math.max(0, Math.min(100, percent)) / 100.0f);
+    }
+
+    public float getHudElementsOpacity() {
+        return Math.max(0.10f, Math.min(1.0f, hudElementsOpacity));
+    }
+
+    public void setHudElementsOpacity(float hudElementsOpacity) {
+        this.hudElementsOpacity = Math.max(0.10f, Math.min(1.0f, hudElementsOpacity));
+        save();
+    }
+
+    public int getHudElementsOpacityPercent() {
+        return Math.round(getHudElementsOpacity() * 100.0f);
+    }
+
+    public void setHudElementsOpacityPercent(int percent) {
+        setHudElementsOpacity(Math.max(10, Math.min(100, percent)) / 100.0f);
+    }
+
+    public float getHudOpacity() {
+        return getHudBackgroundOpacity();
+    }
+
+    public void setHudOpacity(float hudOpacity) {
+        setHudBackgroundOpacity(hudOpacity);
+    }
+
+    public int getHudOpacityPercent() {
+        return getHudBackgroundOpacityPercent();
+    }
+
+    public void setHudOpacityPercent(int percent) {
+        setHudBackgroundOpacityPercent(percent);
+    }
+
+    public String getCustomClientId() {
+        return customClientId != null ? customClientId.trim() : "";
+    }
+
+    public void setCustomClientId(String customClientId) {
+        this.customClientId = customClientId != null ? customClientId.trim() : "";
+        save();
+    }
+
+    public int getVolume() {
+        return volume;
+    }
+
+    public void setVolume(int volume) {
+        this.volume = Math.max(0, Math.min(100, volume));
+        save();
+    }
+
+    public int getVolumeStep() {
+        return volumeStep;
+    }
+
+    public void setVolumeStep(int volumeStep) {
+        this.volumeStep = volumeStep;
+        save();
+    }
+
+    public boolean isShowChatFeedback() {
+        return showChatFeedback;
+    }
+
+    public void setShowChatFeedback(boolean showChatFeedback) {
+        this.showChatFeedback = showChatFeedback;
+        save();
+    }
+
+    public boolean isAudioDuckingEnabled() {
+        return audioDuckingEnabled;
+    }
+
+    public void setAudioDuckingEnabled(boolean audioDuckingEnabled) {
+        this.audioDuckingEnabled = audioDuckingEnabled;
+        save();
+    }
+
+    public boolean isCheckForUpdates() {
+        return checkForUpdates;
+    }
+
+    public void setCheckForUpdates(boolean checkForUpdates) {
+        this.checkForUpdates = checkForUpdates;
+        save();
+    }
+
+    public float getDuckingMultiplier() {
+        return duckingMultiplier;
+    }
+
+    public void setDuckingMultiplier(float duckingMultiplier) {
+        this.duckingMultiplier = Math.max(0.05f, Math.min(1.0f, duckingMultiplier));
+        save();
+    }
+
+    public Set<String> getLikedTracks() {
+        return likedTracks;
+    }
+
+    public ThemeLook getThemeLook() {
+        return themeLook != null ? themeLook : ThemeLook.BOREALIS;
+    }
+
+    public void setThemeLook(ThemeLook themeLook) {
+        this.themeLook = themeLook != null ? themeLook : ThemeLook.BOREALIS;
+        this.themeAccent = ThemeAccent.MATCH_THEME;
+        save();
+    }
+
+    public ThemeAccent getThemeAccent() {
+        return themeAccent != null ? themeAccent : ThemeAccent.MATCH_THEME;
+    }
+
+    public void setThemeAccent(ThemeAccent themeAccent) {
+        this.themeAccent = themeAccent != null ? themeAccent : ThemeAccent.MATCH_THEME;
+        save();
+    }
+
+    public float getGlassOpacity() {
+        return Math.max(0.40f, Math.min(1.0f, glassOpacity));
+    }
+
+    public void setGlassOpacity(float glassOpacity) {
+        this.glassOpacity = Math.max(0.40f, Math.min(1.0f, glassOpacity));
+        save();
+    }
+
+    public int getGlassOpacityPercent() {
+        return Math.round(getGlassOpacity() * 100.0f);
+    }
+
+    public void setGlassOpacityPercent(int percent) {
+        setGlassOpacity(Math.max(40, Math.min(100, percent)) / 100.0f);
+    }
+
+    public boolean isSyncHudTheme() {
+        return syncHudTheme;
+    }
+
+    public void setSyncHudTheme(boolean syncHudTheme) {
+        this.syncHudTheme = syncHudTheme;
+        save();
+    }
+
+    public String getAnonymousInstallId() {
+        if (anonymousInstallId == null || anonymousInstallId.isEmpty()) {
+            anonymousInstallId = UUID.randomUUID().toString();
+            save();
+        }
+        return anonymousInstallId;
+    }
+
+    public boolean isMetricsEnabled() {
+        return metricsEnabled;
+    }
+
+    public void setMetricsEnabled(boolean metricsEnabled) {
+        this.metricsEnabled = metricsEnabled;
+        save();
+    }
+}

@@ -11,9 +11,6 @@ public class SpotifyProcessDetector {
     private static boolean cachedIsRunning = false;
     private static final long CACHE_DURATION_MS = 3000;
 
-    /**
-     * Checks if Spotify desktop application is currently running on the local PC.
-     */
     public static boolean isSpotifyRunning() {
         long now = System.currentTimeMillis();
         if (now - lastCheckTimestamp < CACHE_DURATION_MS) {
@@ -42,17 +39,11 @@ public class SpotifyProcessDetector {
         }
     }
 
-    /**
-     * Force refreshes the running state without waiting for cache expiration.
-     */
     public static boolean forceCheck() {
         lastCheckTimestamp = 0;
         return isSpotifyRunning();
     }
 
-    /**
-     * Attempts to launch Spotify on the host computer.
-     */
     public static boolean launchSpotify() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         try {

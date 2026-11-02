@@ -17,11 +17,6 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * High-performance, non-blocking telemetry and diagnostics reporting service.
- * Batches events locally and dispatches payloads over HTTPS every 10 minutes.
- * Guarantees zero game frame drops and zero crash propagation.
- */
 public class TelemetryService {
 
     private static final String ENDPOINT = "https://api.itzcrih.it/api/v1/telemetry/collect";
@@ -45,7 +40,7 @@ public class TelemetryService {
     }
 
     private TelemetryService() {
-        // Daemon single-thread executor with low thread priority
+        
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "espoty-metrics-worker");
             t.setDaemon(true);
@@ -58,10 +53,8 @@ public class TelemetryService {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
 
-        // Initial launch heartbeat delayed by 15s to allow game to finish boot
         scheduler.schedule(this::reportStartup, 15, TimeUnit.SECONDS);
 
-        // Recurring periodic batch flush every 10 minutes
         scheduler.scheduleAtFixedRate(this::flushBatch, 10, 10, TimeUnit.MINUTES);
     }
 
@@ -69,7 +62,7 @@ public class TelemetryService {
         if (!ModConfig.getInstance().isMetricsEnabled()) return;
 
         if (queueSize.get() >= MAX_QUEUE_SIZE) {
-            // Evict oldest event if queue exceeds limit to prevent memory bloat
+            
             if (eventQueue.poll() != null) {
                 queueSize.decrementAndGet();
             }
@@ -99,7 +92,6 @@ public class TelemetryService {
         meta.addProperty("theme_accent", ModConfig.getInstance().getThemeAccent().name());
         recordEvent("launch", meta);
 
-        // Immediate flush of startup event
         flushBatch();
     }
 
@@ -126,7 +118,6 @@ public class TelemetryService {
             }
             queueSize.addAndGet(-count);
 
-            // Even if no specific events queued, send a periodic heartbeat
             if (eventsArray.isEmpty()) {
                 JsonObject heartbeat = new JsonObject();
                 heartbeat.addProperty("event", "heartbeat");
@@ -165,9 +156,9 @@ public class TelemetryService {
                     .build();
 
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                    .exceptionally(ex -> null); // Non-blocking and silent fail
+                    .exceptionally(ex -> null); 
         } catch (Throwable ignored) {
-            // Guarantee total failure isolation
+            
         }
     }
 

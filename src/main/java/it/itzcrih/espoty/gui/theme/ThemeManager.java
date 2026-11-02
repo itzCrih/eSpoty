@@ -2,10 +2,6 @@ package it.itzcrih.espoty.gui.theme;
 
 import it.itzcrih.espoty.config.ModConfig;
 
-/**
- * Modern Theme Engine for eSpoty.
- * Manages theme presets, accent color palettes, and glass styling.
- */
 public class ThemeManager {
 
     public enum ThemeLook {
@@ -89,7 +85,6 @@ public class ThemeManager {
         public int getColor2() { return color2; }
     }
 
-    // Cached theme colors
     private static ThemeLook cachedLook;
     private static ThemeAccent cachedAccentSetting;
     private static float cachedOpacity = -1f;

@@ -92,7 +92,6 @@ public class SpotifyClient {
                 boolean shuffleState = json.has("shuffle_state") && json.get("shuffle_state").getAsBoolean();
                 String repeatState = json.has("repeat_state") ? json.get("repeat_state").getAsString() : "off";
 
-                // Artists
                 StringBuilder artists = new StringBuilder();
                 if (item.has("artists") && item.get("artists").isJsonArray()) {
                     JsonArray artistsArr = item.getAsJsonArray("artists");
@@ -105,7 +104,6 @@ public class SpotifyClient {
                     }
                 }
 
-                // Album
                 String albumName = "";
                 String albumArtUrl = "";
                 if (item.has("album") && !item.get("album").isJsonNull()) {
@@ -114,13 +112,12 @@ public class SpotifyClient {
                     if (album.has("images") && album.get("images").isJsonArray()) {
                         JsonArray images = album.getAsJsonArray("images");
                         if (!images.isEmpty()) {
-                            // First image is usually 640x640 or highest
+                            
                             albumArtUrl = images.get(0).getAsJsonObject().get("url").getAsString();
                         }
                     }
                 }
 
-                // Device
                 String deviceName = "Local Device";
                 String deviceType = "Computer";
                 int volumePercent = 50;

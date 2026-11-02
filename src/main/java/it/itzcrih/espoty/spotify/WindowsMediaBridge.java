@@ -59,7 +59,6 @@ public class WindowsMediaBridge {
                 return;
             }
 
-            // Create localhost socket server
             serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
             int port = serverSocket.getLocalPort();
             serverSocket.setSoTimeout(12000);
@@ -75,7 +74,6 @@ public class WindowsMediaBridge {
             pb.redirectErrorStream(true);
             this.process = pb.start();
 
-            // Accept connection in background
             new Thread(() -> {
                 try {
                     clientSocket = serverSocket.accept();

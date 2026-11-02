@@ -168,7 +168,7 @@ public class LyricsManager {
                         currentLyrics = parsed;
                     }
                 } else {
-                    // Try fallback search without album if not found
+                    
                     SongLyrics empty = new SongLyrics(false, Collections.emptyList(), "No lyrics found.");
                     cache.put(key, empty);
                     if (key.equals(currentTrackKey)) {
