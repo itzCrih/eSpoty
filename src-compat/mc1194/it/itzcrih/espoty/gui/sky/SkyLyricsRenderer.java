@@ -241,7 +241,7 @@ public class SkyLyricsRenderer {
                 poseStack.pushPose();
                 poseStack.translate(0.0f, cachedElevation, -cachedDistance);
                 poseStack.mulPose(cachedTiltQuat);
-                poseStack.scale(-baseScale, -baseScale, baseScale);
+                poseStack.scale(baseScale, -baseScale, baseScale);
                 renderMonumentContent(font, lineSpacing, linesAbove, linesBelow, activeIdx, previousActiveIdx, animT, ease, poseStack, DEDICATED_BUFFER_SOURCE);
                 poseStack.popPose();
             }
@@ -252,7 +252,7 @@ public class SkyLyricsRenderer {
                 reusableRotY.rotationY((float) Math.PI);
                 poseStack.mulPose(reusableRotY);
                 poseStack.mulPose(cachedTiltQuat);
-                poseStack.scale(-baseScale, -baseScale, baseScale);
+                poseStack.scale(baseScale, -baseScale, baseScale);
                 renderMonumentContent(font, lineSpacing, linesAbove, linesBelow, activeIdx, previousActiveIdx, animT, ease, poseStack, DEDICATED_BUFFER_SOURCE);
                 poseStack.popPose();
             }
@@ -263,7 +263,7 @@ public class SkyLyricsRenderer {
             reusableRotY.rotationY(angleYRad);
             poseStack.mulPose(reusableRotY);
             poseStack.mulPose(cachedTiltQuat);
-            poseStack.scale(-baseScale, -baseScale, baseScale);
+            poseStack.scale(baseScale, -baseScale, baseScale);
             renderMonumentContent(font, lineSpacing, linesAbove, linesBelow, activeIdx, previousActiveIdx, animT, ease, poseStack, DEDICATED_BUFFER_SOURCE);
             poseStack.popPose();
         }
@@ -576,7 +576,7 @@ public class SkyLyricsRenderer {
             lastCombatLyricsRef = lyrics;
             lastCombatFont = currentFont;
             rebuildCombatChunks(font, trackKey, lyrics, currentFont.getStyle(), state.getDurationMs());
-            if (trackChanged) {
+            if (trackChanged || lyricsChanged) {
                 active3DBillboards.clear();
                 spawnedChunkIds.clear();
                 lastProgressMs = -1;
@@ -691,7 +691,7 @@ public class SkyLyricsRenderer {
 
             float userScale = config.getSkyLyricsScale();
             float baseScale = 0.024f * userScale * introPunch * exitScale;
-            poseStack.scale(-baseScale, -baseScale, baseScale);
+            poseStack.scale(baseScale, -baseScale, baseScale);
 
             if (slideX != 0.0f) {
                 poseStack.translate(slideX, 0.0f, 0.0f);
@@ -1083,6 +1083,21 @@ public class SkyLyricsRenderer {
                         curChunkStart = cEnd;
                     }
                 }
+            }
+        } else {
+            long duration = trackDurationMs > 0 ? trackDurationMs : 180000L;
+            long step = 10000L;
+            int total = (int) Math.max(1, duration / step);
+            String titleText = trackKey;
+            Component wordComp = Component.literal(titleText).withStyle(style);
+            int wWidth = font.width(wordComp);
+            for (int i = 0; i < total; i++) {
+                long start = i * step;
+                long end = start + 5000L;
+                List<CombatWord> words = new ArrayList<>();
+                words.add(new CombatWord(titleText, wordComp, wWidth, start, end));
+                boolean isRightSide = (i % 2 == 1);
+                cachedCombatChunks.add(new CombatChunk(i, words, wWidth, start, end, isRightSide));
             }
         }
     }
