@@ -2,6 +2,7 @@ package it.itzcrih.espoty.gui.hud;
 
 import it.itzcrih.espoty.config.ModConfig;
 import it.itzcrih.espoty.gui.render.AaRoundRect;
+import it.itzcrih.espoty.gui.render.RenderUtils;
 import it.itzcrih.espoty.gui.theme.ThemeManager;
 import it.itzcrih.espoty.gui.texture.AlbumArtManager;
 import it.itzcrih.espoty.gui.widget.AudioWaveformRenderer;
@@ -20,6 +21,14 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 
 public class SpotifyHudRenderer {
+
+    // UI Icon Identifiers
+    private static final Identifier HEART_FILLED_ICON = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_heart_filled.png");
+    private static final Identifier HEART_OUTLINE_ICON = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_heart.png");
+    private static final Identifier ICON_CTRL_PLAY = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_play.png");
+    private static final Identifier ICON_CTRL_PAUSE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_pause.png");
+    private static final Identifier ICON_CTRL_PREV = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_prev.png");
+    private static final Identifier ICON_CTRL_NEXT = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_next.png");
 
     // Animation states
     private static float currentExtraHeight = 0f;
@@ -202,34 +211,31 @@ public class SpotifyHudRenderer {
         long progressMs = stateManager.getInterpolatedProgressMs();
         boolean isLiked = stateManager.isCurrentTrackLiked();
         if (isLiked) {
-            guiGraphics.drawString(font, "❤", x + cardWidth - 44, titleY, applyAlpha(0xFFFF4081, elemAlpha), true);
+            RenderUtils.drawTintedIcon(guiGraphics, HEART_FILLED_ICON, x + cardWidth - 46, titleY, 10, applyAlpha(0xFFFF4081, elemAlpha));
         }
         AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, x + cardWidth - 32, titleY + 9, 24, 9, 6,
                 state.isPlaying(), progressMs, elemAlpha, accentColor, accent2Color,
                 state.getTrackName(), state.getArtistNames(), hasActiveLyric);
 
-        // Marquee scrolling for track title
+        // Marquee scrolling for track title with start reading pause
         int rightOffset = isLiked ? 46 : 34;
         int maxTitleW = maxTextWidth - rightOffset;
         if (titleWidth > maxTitleW) {
-            int scX1 = screenX + (int) Math.floor(textX * scale);
-            int scY1 = screenY + (int) Math.floor((titleY - 2) * scale);
-            int scX2 = screenX + (int) Math.ceil((textX + maxTitleW) * scale);
-            int scY2 = screenY + (int) Math.ceil((titleY + 12) * scale);
-            boolean scissored = false;
-            if (scX2 > scX1 && scY2 > scY1) {
-                guiGraphics.enableScissor(scX1, scY1, scX2, scY2);
-                scissored = true;
-            }
-            long cycle = (now / 35) % (titleWidth + 40);
-            int scrollX = (int) (textX - cycle);
-            guiGraphics.drawString(font, trackTitle, scrollX, titleY, applyAlpha(accentColor, elemAlpha), true);
-            guiGraphics.drawString(font, trackTitle, scrollX + titleWidth + 40, titleY, applyAlpha(accentColor, elemAlpha), true);
-            if (scissored) {
-                guiGraphics.disableScissor();
-            }
+            guiGraphics.enableScissor(textX, titleY - 2, textX + maxTitleW, titleY + 14);
+
+            long scrollDist = titleWidth + 40;
+            long scrollDuration = scrollDist * 32L;
+            long totalPeriod = scrollDuration + 1800L;
+            long periodPos = now % totalPeriod;
+            long cycleOffset = (periodPos < 1800L) ? 0L : (periodPos - 1800L) / 32L;
+
+            int scrollX = (int) (textX - cycleOffset);
+            RenderUtils.drawGlowText(guiGraphics, font, trackTitle, scrollX, titleY, applyAlpha(accentColor, elemAlpha), accentColor, elemAlpha);
+            RenderUtils.drawGlowText(guiGraphics, font, trackTitle, scrollX + (int) scrollDist, titleY, applyAlpha(accentColor, elemAlpha), accentColor, elemAlpha);
+
+            guiGraphics.disableScissor();
         } else {
-            guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
+            RenderUtils.drawGlowText(guiGraphics, font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), accentColor, elemAlpha);
         }
 
         // Artist Name
@@ -315,14 +321,8 @@ public class SpotifyHudRenderer {
 
             boolean scissoredLyric = false;
             if (lyricWidth > maxLyricW) {
-                int scLyrX1 = screenX + (int) Math.floor((x + 18) * scale);
-                int scLyrY1 = screenY + (int) Math.floor((dividerY + 1) * scale);
-                int scLyrX2 = screenX + (int) Math.ceil((x + cardWidth - 8) * scale);
-                int scLyrY2 = screenY + (int) Math.ceil((y + dynamicTotalHeight) * scale);
-                if (scLyrX2 > scLyrX1 && scLyrY2 > scLyrY1) {
-                    guiGraphics.enableScissor(scLyrX1, scLyrY1, scLyrX2, scLyrY2);
-                    scissoredLyric = true;
-                }
+                guiGraphics.enableScissor(x + 18, dividerY + 1, x + cardWidth - 8, y + dynamicTotalHeight);
+                scissoredLyric = true;
             }
 
             // Smooth cross-fade outgoing line if transitioning
@@ -333,12 +333,17 @@ public class SpotifyHudRenderer {
             }
 
             if (lyricWidth > maxLyricW) {
-                long cycle = (now / 35) % (lyricWidth + 30);
-                int scrollX = (int) (x + 18 - cycle);
-                guiGraphics.drawString(font, lyricComp, scrollX, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
-                guiGraphics.drawString(font, lyricComp, scrollX + lyricWidth + 30, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
+                long scrollDist = lyricWidth + 30;
+                long scrollDuration = scrollDist * 32L;
+                long totalPeriod = scrollDuration + 1500L;
+                long periodPos = now % totalPeriod;
+                long cycleOffset = (periodPos < 1500L) ? 0L : (periodPos - 1500L) / 32L;
+
+                int scrollX = (int) (x + 18 - cycleOffset);
+                RenderUtils.drawGlowComponent(guiGraphics, font, lyricComp, scrollX, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), accentColor, lineAlpha * 0.65f);
+                RenderUtils.drawGlowComponent(guiGraphics, font, lyricComp, scrollX + (int) scrollDist, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), accentColor, lineAlpha * 0.65f);
             } else {
-                guiGraphics.drawString(font, lyricComp, x + 18, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), true);
+                RenderUtils.drawGlowComponent(guiGraphics, font, lyricComp, x + 18, lyricY, applyAlpha(0xFFFFFDE7, lineAlpha), accentColor, lineAlpha * 0.65f);
             }
             if (scissoredLyric) {
                 guiGraphics.disableScissor();
@@ -400,41 +405,41 @@ public class SpotifyHudRenderer {
         int prevX = centerX - 46;
         int prevY = dockY + 2;
         boolean prevHover = (mouseX >= prevX && mouseX <= prevX + 22 && mouseY >= prevY && mouseY <= prevY + 18);
-        renderControlBtn(guiGraphics, font, "◀◀", prevX, prevY, 22, 18, prevHover, alpha, accentColor);
+        renderControlIconBtn(guiGraphics, ICON_CTRL_PREV, prevX, prevY, 22, 18, prevHover, alpha, accentColor);
 
         // Play / Pause Button: centerX - 13, w = 26, h = 18
         int playX = centerX - 13;
         int playY = dockY + 2;
         boolean playHover = (mouseX >= playX && mouseX <= playX + 26 && mouseY >= playY && mouseY <= playY + 18);
-        String playIcon = state.isPlaying() ? "❚❚" : "▶";
-        renderControlBtn(guiGraphics, font, playIcon, playX, playY, 26, 18, playHover, alpha, accentColor);
+        Identifier playIcon = state.isPlaying() ? ICON_CTRL_PAUSE : ICON_CTRL_PLAY;
+        renderControlIconBtn(guiGraphics, playIcon, playX, playY, 26, 18, playHover, alpha, accentColor);
 
         // Next Button: centerX + 24, w = 22, h = 18
         int nextX = centerX + 24;
         int nextY = dockY + 2;
         boolean nextHover = (mouseX >= nextX && mouseX <= nextX + 22 && mouseY >= nextY && mouseY <= nextY + 18);
-        renderControlBtn(guiGraphics, font, "▶▶", nextX, nextY, 22, 18, nextHover, alpha, accentColor);
+        renderControlIconBtn(guiGraphics, ICON_CTRL_NEXT, nextX, nextY, 22, 18, nextHover, alpha, accentColor);
 
         // Like / Unlike Button: centerX + 56, w = 20, h = 18
         int likeX = centerX + 56;
         int likeY = dockY + 2;
         boolean likeHover = (mouseX >= likeX && mouseX <= likeX + 20 && mouseY >= likeY && mouseY <= likeY + 18);
         boolean isLiked = SpotifyStateManager.getInstance().isCurrentTrackLiked();
-        String likeIcon = isLiked ? "❤" : "♡";
-        renderControlBtn(guiGraphics, font, likeIcon, likeX, likeY, 20, 18, likeHover, alpha, isLiked ? 0xFFFF4081 : accentColor);
+        Identifier heartIcon = isLiked ? HEART_FILLED_ICON : HEART_OUTLINE_ICON;
+        renderControlIconBtn(guiGraphics, heartIcon, likeX, likeY, 20, 18, likeHover, alpha, isLiked ? 0xFFFF4081 : accentColor);
     }
 
-    private static void renderControlBtn(GuiGraphics g, Font font, String text, int bx, int by, int bw, int bh, boolean hover, float alpha, int accent) {
+    private static void renderControlIconBtn(GuiGraphics g, Identifier icon, int bx, int by, int bw, int bh, boolean hover, float alpha, int accent) {
         int bg = hover ? applyAlpha(accent, alpha * 0.35f) : applyAlpha(0x22FFFFFF, alpha * 0.6f);
         int border = hover ? applyAlpha(accent, alpha * 0.9f) : applyAlpha(0x18FFFFFF, alpha * 0.4f);
 
         AaRoundRect.draw(g, bx, by, bw, bh, 5, bg, border);
 
-        int textColor = hover ? applyAlpha(0xFFFFFFFF, alpha) : applyAlpha(0xD0FFFFFF, alpha);
-        int textW = font.width(text);
-        int tx = bx + (bw - textW) / 2;
-        int ty = by + (bh - 8) / 2;
-        g.drawString(font, text, tx, ty, textColor, true);
+        int iconColor = hover ? applyAlpha(0xFFFFFFFF, alpha) : applyAlpha(accent, alpha);
+        int iconSize = Math.min(bw, bh) - 8;
+        int ix = bx + (bw - iconSize) / 2;
+        int iy = by + (bh - iconSize) / 2;
+        RenderUtils.drawTintedIcon(g, icon, ix, iy, iconSize, iconColor);
     }
 
     public static boolean handleChatMouseClick(double mouseX, double mouseY) {
@@ -588,7 +593,7 @@ public class SpotifyHudRenderer {
 
         boolean isLiked = stateManager.isCurrentTrackLiked();
         if (isLiked) {
-            guiGraphics.drawString(font, "❤", x + cardWidth - 44, titleY, applyAlpha(0xFFFF4081, elemAlpha), true);
+            RenderUtils.drawTintedIcon(guiGraphics, HEART_FILLED_ICON, x + cardWidth - 46, titleY, 10, applyAlpha(0xFFFF4081, elemAlpha));
         }
         AudioWaveformRenderer.renderSyncedWaveform(guiGraphics, x + cardWidth - 32, titleY + 9, 24, 9, 6,
                 true, state.getProgressMs(), elemAlpha, accentColor, accent2Color,
@@ -597,21 +602,11 @@ public class SpotifyHudRenderer {
         int rightOffset = isLiked ? 46 : 34;
         int maxTitleW = maxTextWidth - rightOffset;
         if (font.width(trackTitle) > maxTitleW) {
-            int scX1 = screenX + (int) Math.floor(textX * scale);
-            int scY1 = screenY + (int) Math.floor((titleY - 2) * scale);
-            int scX2 = screenX + (int) Math.ceil((textX + maxTitleW) * scale);
-            int scY2 = screenY + (int) Math.ceil((titleY + 12) * scale);
-            boolean scissored = false;
-            if (scX2 > scX1 && scY2 > scY1) {
-                guiGraphics.enableScissor(scX1, scY1, scX2, scY2);
-                scissored = true;
-            }
-            guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
-            if (scissored) {
-                guiGraphics.disableScissor();
-            }
+            guiGraphics.enableScissor(textX, titleY - 2, textX + maxTitleW, titleY + 14);
+            RenderUtils.drawGlowText(guiGraphics, font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), accentColor, elemAlpha);
+            guiGraphics.disableScissor();
         } else {
-            guiGraphics.drawString(font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), true);
+            RenderUtils.drawGlowText(guiGraphics, font, trackTitle, textX, titleY, applyAlpha(accentColor, elemAlpha), accentColor, elemAlpha);
         }
 
         int artistY = titleY + 11;

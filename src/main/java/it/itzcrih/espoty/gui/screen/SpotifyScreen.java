@@ -2,6 +2,7 @@ package it.itzcrih.espoty.gui.screen;
 
 import it.itzcrih.espoty.config.ModConfig;
 import it.itzcrih.espoty.gui.render.AaRoundRect;
+import it.itzcrih.espoty.gui.render.RenderUtils;
 import it.itzcrih.espoty.gui.theme.ThemeManager;
 import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeAccent;
 import it.itzcrih.espoty.gui.theme.ThemeManager.ThemeLook;
@@ -125,6 +126,27 @@ public class SpotifyScreen extends Screen {
 
     // Mod logo identifier
     private static final Identifier LOGO_ICON = Identifier.fromNamespaceAndPath("espoty", "icon.png");
+    // High-Resolution UI Icon Assets
+    private static final Identifier ICON_TAB_PLAYER = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_player.png");
+    private static final Identifier ICON_TAB_LYRICS = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_lyrics.png");
+    private static final Identifier ICON_TAB_QUEUE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_queue.png");
+    private static final Identifier ICON_TAB_HUD = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_hud.png");
+    private static final Identifier ICON_TAB_THEMES = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_themes.png");
+    private static final Identifier ICON_TAB_SETTINGS = Identifier.fromNamespaceAndPath("espoty", "textures/ui/tab_settings.png");
+
+    private static final Identifier ICON_CTRL_PLAY = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_play.png");
+    private static final Identifier ICON_CTRL_PAUSE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_pause.png");
+    private static final Identifier ICON_CTRL_PREV = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_prev.png");
+    private static final Identifier ICON_CTRL_NEXT = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_next.png");
+    private static final Identifier ICON_CTRL_SHUFFLE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_shuffle.png");
+    private static final Identifier ICON_CTRL_REPEAT = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_repeat.png");
+    private static final Identifier ICON_CTRL_REPEAT_ONE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_repeat_one.png");
+    private static final Identifier ICON_CTRL_HEART = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_heart.png");
+    private static final Identifier ICON_CTRL_HEART_FILLED = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_heart_filled.png");
+    private static final Identifier ICON_CTRL_CLOSE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_close.png");
+    private static final Identifier ICON_CTRL_VOLUME = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_volume.png");
+    private static final Identifier ICON_CTRL_VOLUME_MUTE = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_volume_mute.png");
+    private static final Identifier ICON_CTRL_REFRESH = Identifier.fromNamespaceAndPath("espoty", "textures/ui/ctrl_refresh.png");
 
     public SpotifyScreen() {
         super(Component.literal("eSpoty Hub"));
@@ -314,48 +336,25 @@ guiGraphics.pose().pushMatrix();
 
     
     private void renderTabIcon(GuiGraphics g, Tab tab, int ix, int iy, int color) {
-        switch (tab) {
-            case PLAYER -> {
-                g.drawString(this.font, "♪", ix + 2, iy, color, false);
-            }
-            case LYRICS -> {
-                g.fill(ix + 1, iy + 2, ix + 11, iy + 3, color);
-                g.fill(ix + 1, iy + 5, ix + 10, iy + 6, color);
-                g.fill(ix + 1, iy + 8, ix + 7, iy + 9, color);
-            }
-            case QUEUE -> {
-                g.fill(ix + 1, iy + 2, ix + 11, iy + 3, color);
-                g.fill(ix + 1, iy + 5, ix + 11, iy + 6, color);
-                g.fill(ix + 1, iy + 8, ix + 8, iy + 9, color);
-                g.fill(ix + 9, iy + 7, ix + 12, iy + 10, color);
-            }
-            case HUD_EDITOR -> {
-                g.fill(ix + 1, iy + 1, ix + 13, iy + 2, color);
-                g.fill(ix + 1, iy + 10, ix + 13, iy + 11, color);
-                g.fill(ix + 1, iy + 2, ix + 2, iy + 10, color);
-                g.fill(ix + 12, iy + 2, ix + 13, iy + 10, color);
-                g.fill(ix + 3, iy + 3, ix + 8, iy + 6, color);
-            }
-            case THEMES -> {
-                g.drawString(this.font, "✦", ix + 2, iy, color, false);
-            }
-            case SETTINGS -> {
-                g.fill(ix + 1, iy + 3, ix + 12, iy + 4, color);
-                g.fill(ix + 4, iy + 2, ix + 6, iy + 5, color);
-                g.fill(ix + 1, iy + 8, ix + 12, iy + 9, color);
-                g.fill(ix + 8, iy + 7, ix + 10, iy + 10, color);
-            }
-        }
+        Identifier icon = switch (tab) {
+            case PLAYER -> ICON_TAB_PLAYER;
+            case LYRICS -> ICON_TAB_LYRICS;
+            case QUEUE -> ICON_TAB_QUEUE;
+            case HUD_EDITOR -> ICON_TAB_HUD;
+            case THEMES -> ICON_TAB_THEMES;
+            case SETTINGS -> ICON_TAB_SETTINGS;
+        };
+        RenderUtils.drawTintedIcon(g, icon, ix, iy, 14, color);
     }
 
     private void renderContentHeader(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int contentX = modalX + sidebarWidth + 14;
         int contentW = modalWidth - sidebarWidth - 26;
 
-        // Active Section Title with Star Glyph (Centered vertically with close button)
-        guiGraphics.drawString(this.font, activeTab.getTitle().toUpperCase(), contentX, modalY + 16, ThemeManager.getAccent(), true);
+        // Active Section Title with Accent Bloom Glow
+        RenderUtils.drawGlowText(guiGraphics, this.font, activeTab.getTitle().toUpperCase(), contentX, modalY + 16, ThemeManager.getAccent(), ThemeManager.getAccent(), 1.0f);
 
-        // Sleek Circular Glass Close Button (turns smooth red on hover)
+        // Sleek Circular Glass Close Button (turns smooth red on hover) with High-Res Close Icon
         int closeSize = 16;
         int closeX = modalX + modalWidth - closeSize - 12;
         int closeY = modalY + 12;
@@ -368,11 +367,7 @@ guiGraphics.pose().pushMatrix();
         AaRoundRect.draw(guiGraphics, closeX, closeY, closeSize, closeSize, closeSize / 2, closeBg, closeBorder);
         int ccx = closeX + (closeSize / 2);
         int ccy = closeY + (closeSize / 2);
-        guiGraphics.fill(ccx - 3, ccy - 3, ccx - 1, ccy - 1, closeText);
-        guiGraphics.fill(ccx + 2, ccy - 3, ccx + 4, ccy - 1, closeText);
-        guiGraphics.fill(ccx - 1, ccy - 1, ccx + 2, ccy + 2, closeText);
-        guiGraphics.fill(ccx - 3, ccy + 2, ccx - 1, ccy + 4, closeText);
-        guiGraphics.fill(ccx + 2, ccy + 2, ccx + 4, ccy + 4, closeText);
+        RenderUtils.drawTintedIcon(guiGraphics, ICON_CTRL_CLOSE, ccx - 4, ccy - 4, 8, closeText);
 
         // Hairline separator below header
         guiGraphics.fillGradient(contentX, modalY + 38, modalX + modalWidth - 12, modalY + 39, ThemeManager.getGlassEdge(), 0x05FFFFFF);
@@ -424,7 +419,7 @@ guiGraphics.pose().pushMatrix();
         int infoMaxW = contentW - artSize - 42;
 
         String trackTitle = trimWithEllipsis(state.getTrackName(), infoMaxW);
-        guiGraphics.drawString(this.font, trackTitle, infoX, contentY + 8, 0xFFFFFFFF, true);
+        RenderUtils.drawGlowText(guiGraphics, this.font, trackTitle, infoX, contentY + 8, 0xFFFFFFFF, accent, 0.85f);
 
         String artist = trimWithEllipsis(state.getArtistNames(), infoMaxW);
         guiGraphics.drawString(this.font, artist, infoX, contentY + 23, ThemeManager.getTextPrimary(), false);
@@ -435,13 +430,14 @@ guiGraphics.pose().pushMatrix();
             guiGraphics.drawString(this.font, album, infoX, contentY + 38, ThemeManager.getTextSecondary(), false);
         }
 
-        // Like Heart Icon
+        // Like Heart Icon (High-Res Anti-Aliased Vector Icon)
         boolean isLiked = stateManager.isCurrentTrackLiked();
         int heartX = contentX + contentW - 18;
         int heartY = contentY + 8;
         boolean heartHover = isMouseOver(mouseX, mouseY, heartX - 4, heartY - 4, 18, 18);
-        int heartColor = isLiked ? accent : (heartHover ? accent2 : ThemeManager.getTextMuted());
-        guiGraphics.drawString(this.font, isLiked ? "❤" : "♡", heartX, heartY, isLiked ? 0xFFFF4081 : heartColor, isLiked);
+        int heartColor = isLiked ? 0xFFFF4081 : (heartHover ? accent2 : ThemeManager.getTextMuted());
+        Identifier heartIcon = isLiked ? ICON_CTRL_HEART_FILLED : ICON_CTRL_HEART;
+        RenderUtils.drawTintedIcon(guiGraphics, heartIcon, heartX - 2, heartY - 2, 14, heartColor);
 
         // Device indicator tag
         if (state.getDeviceName() != null && !state.getDeviceName().isEmpty()) {
@@ -540,7 +536,9 @@ guiGraphics.pose().pushMatrix();
         boolean volHover = isMouseOver(mouseX, mouseY, volBarX, volY, volBarW, 12);
         int curVol = Math.round(dragVolumeRatio * 100);
 
-        guiGraphics.drawString(this.font, "VOL", volBarX - 22, volY - 2, volHover ? 0xFFFFFFFF : ThemeManager.getTextSecondary(), false);
+        Identifier volIcon = (curVol == 0) ? ICON_CTRL_VOLUME_MUTE : ICON_CTRL_VOLUME;
+        int volColor = volHover ? 0xFFFFFFFF : ThemeManager.getTextSecondary();
+        RenderUtils.drawTintedIcon(guiGraphics, volIcon, volBarX - 20, volY - 4, 12, volColor);
 
         // Volume track
         AaRoundRect.draw(guiGraphics, volBarX, volY, volBarW, 4, 2, 0x24FFFFFF, 0);
@@ -616,7 +614,7 @@ guiGraphics.pose().pushMatrix();
                 if (isActive) {
                     // Glowing active line card
                     AaRoundRect.draw(guiGraphics, contentX + 2, lineY - 2, contentW - 4, 20, 6, ThemeManager.getAccentDim(0.24f), ThemeManager.applyAlpha(accent, 0.55f));
-                    guiGraphics.drawCenteredString(this.font, text, contentX + (contentW / 2), lineY + 3, 0xFFFFFFFF);
+                    RenderUtils.drawGlowCenteredText(guiGraphics, this.font, text, contentX + (contentW / 2), lineY + 3, 0xFFFFFFFF, accent, 0.95f);
                 } else {
                     int dist = Math.abs(i - activeIdx);
                     int alpha = Math.max(50, 210 - (dist * 40));
@@ -657,7 +655,7 @@ guiGraphics.pose().pushMatrix();
         renderButton(guiGraphics, "↺ Refresh", refreshX, headerY, refreshW, refreshH, refreshHover);
 
         String countText = items.isEmpty() ? "NO UPCOMING TRACKS" : "UPCOMING QUEUE (" + items.size() + ")";
-        guiGraphics.drawString(this.font, countText, contentX + 2, headerY + 5, accent, true);
+        RenderUtils.drawGlowText(guiGraphics, this.font, countText, contentX + 2, headerY + 5, accent, accent, 0.85f);
 
         int listTopY = headerY + 22;
         int listH = contentH - 22;
@@ -744,7 +742,7 @@ guiGraphics.pose().pushMatrix();
                 int remBg = remHover ? 0x44FF3333 : 0x14FFFFFF;
                 int remBorder = remHover ? 0xFFFF4444 : 0x22FFFFFF;
                 AaRoundRect.draw(guiGraphics, remX, btnY, btnSize, btnSize, 4, remBg, remBorder);
-                guiGraphics.drawCenteredString(this.font, "x", remX + (btnSize / 2), btnY + 3, remHover ? 0xFFFF5555 : ThemeManager.getTextMuted());
+                RenderUtils.drawTintedIcon(guiGraphics, ICON_CTRL_CLOSE, remX + 4, btnY + 4, 8, remHover ? 0xFFFF5555 : ThemeManager.getTextMuted());
 
                 // Track Line: Title in bold white, artist in secondary
                 int textX = contentX + 28;
@@ -1358,68 +1356,21 @@ guiGraphics.pose().pushMatrix();
     }
 
     /**
-     * Precision Vector Glyphs for Media Controls: perfectly sharp at all GUI scales.
+     * High-Resolution Vector-Anti-Aliased Media Control Icons: perfectly sharp at all GUI scales.
      */
     private void renderControlIcon(GuiGraphics g, String type, int cx, int cy, int color) {
         switch (type) {
-            case "PLAY" -> {
-                // Right-pointing filled play triangle (width 7, height 11)
-                for (int i = 0; i <= 6; i++) {
-                    int h = 5 - (i * 5 / 7);
-                    g.fill(cx - 2 + i, cy - h, cx - 1 + i, cy + h + 1, color);
-                }
-            }
-            case "PAUSE" -> {
-                // Two vertical pause bars (width 3, height 10, gap 2)
-                g.fill(cx - 4, cy - 5, cx - 1, cy + 5, color);
-                g.fill(cx + 1, cy - 5, cx + 4, cy + 5, color);
-            }
-            case "PREV" -> {
-                // Previous: vertical stop bar + left triangle
-                g.fill(cx - 5, cy - 4, cx - 3, cy + 5, color);
-                for (int i = 0; i <= 5; i++) {
-                    int h = i * 4 / 5;
-                    g.fill(cx - 1 + i, cy - h, cx + i, cy + h + 1, color);
-                }
-            }
-            case "NEXT" -> {
-                // Next: right triangle + vertical stop bar
-                for (int i = 0; i <= 5; i++) {
-                    int h = 4 - (i * 4 / 5);
-                    g.fill(cx - 4 + i, cy - h, cx - 3 + i, cy + h + 1, color);
-                }
-                g.fill(cx + 3, cy - 4, cx + 5, cy + 5, color);
-            }
-            case "SHUF" -> {
-                g.fill(cx - 5, cy - 3, cx - 2, cy - 2, color);
-                g.fill(cx - 2, cy - 2, cx + 1, cy + 1, color);
-                g.fill(cx + 1, cy + 1, cx + 4, cy + 2, color);
-                g.fill(cx - 5, cy + 2, cx - 2, cy + 1, color);
-                g.fill(cx - 2, cy + 1, cx + 1, cy - 2, color);
-                g.fill(cx + 1, cy - 2, cx + 4, cy - 3, color);
-                g.fill(cx + 3, cy - 5, cx + 5, cy - 2, color);
-                g.fill(cx + 3, cy + 1, cx + 5, cy + 4, color);
-            }
-            case "REP" -> {
-                g.fill(cx - 4, cy - 4, cx + 4, cy - 3, color);
-                g.fill(cx - 4, cy + 3, cx + 4, cy + 4, color);
-                g.fill(cx - 4, cy - 3, cx - 3, cy + 1, color);
-                g.fill(cx + 3, cy - 1, cx + 4, cy + 3, color);
-                g.fill(cx + 2, cy - 6, cx + 4, cy - 4, color);
-                g.fill(cx - 4, cy + 4, cx - 2, cy + 6, color);
-            }
-            case "REP1" -> {
-                g.fill(cx - 4, cy - 4, cx + 4, cy - 3, color);
-                g.fill(cx - 4, cy + 3, cx + 4, cy + 4, color);
-                g.fill(cx - 4, cy - 3, cx - 3, cy + 1, color);
-                g.fill(cx + 3, cy - 1, cx + 4, cy + 3, color);
-                g.fill(cx + 2, cy - 6, cx + 4, cy - 4, color);
-                g.fill(cx - 4, cy + 4, cx - 2, cy + 6, color);
-                g.fill(cx, cy - 2, cx + 1, cy + 2, color);
-            }
-            default -> {
-                g.drawCenteredString(this.font, type, cx, cy - 4, color);
-            }
+            case "PLAY" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_PLAY, cx - 6, cy - 7, 14, color);
+            case "PAUSE" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_PAUSE, cx - 6, cy - 6, 12, color);
+            case "PREV" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_PREV, cx - 6, cy - 6, 12, color);
+            case "NEXT" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_NEXT, cx - 6, cy - 6, 12, color);
+            case "SHUF" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_SHUFFLE, cx - 7, cy - 7, 14, color);
+            case "REP" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_REPEAT, cx - 7, cy - 7, 14, color);
+            case "REP1" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_REPEAT_ONE, cx - 7, cy - 7, 14, color);
+            case "HEART" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_HEART, cx - 7, cy - 7, 14, color);
+            case "HEART_FILLED" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_HEART_FILLED, cx - 7, cy - 7, 14, color);
+            case "CLOSE" -> RenderUtils.drawTintedIcon(g, ICON_CTRL_CLOSE, cx - 4, cy - 4, 8, color);
+            default -> g.drawCenteredString(this.font, type, cx, cy - 4, color);
         }
     }
 
