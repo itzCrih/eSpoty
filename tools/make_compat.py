@@ -79,6 +79,8 @@ def build_mc121():
         float colR = ((color >> 16) & 0xFF) / 255.0f;
         float colG = ((color >> 8) & 0xFF) / 255.0f;
         float colB = (color & 0xFF) / 255.0f;
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
         com.mojang.blaze3d.systems.RenderSystem.setShaderColor(colR, colG, colB, colA);
         g.blit(texture, x, y, 0.0f, 0.0f, width, height, width, height);
         com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);''',
@@ -102,8 +104,11 @@ def build_mc121():
         if 'MainMenuMiniPlayer' in rel:
             c = c.replace('import net.minecraft.client.input.MouseButtonEvent;\n', '')
             c = c.replace('ScreenMouseEvents.allowMouseClick(screen).register(MainMenuMiniPlayer::handleMouseClick);', 'ScreenMouseEvents.allowMouseClick(screen).register((s, mx, my, btn) -> handleMouseClick(s, mx, my, btn));')
-            c = re.sub(r'private static boolean handleMouseClick\(Screen screen, MouseButtonEvent event\) \{', 'private static boolean handleMouseClick(Screen screen, double mouseX, double mouseY, int button) {\n        int mx = (int) mouseX;\n        int my = (int) mouseY;\n        if (button != 0) return true;', c)
-            c = c.replace('if (event.button() != 0) return true; // Only handle left clicks\n\n        int mx = (int) event.x();\n        int my = (int) event.y();', '')
+            c = re.sub(
+                r'private static boolean handleMouseClick\(Screen screen,\s*MouseButtonEvent event\)\s*\{[^}]*?int my = \(int\) event\.y\(\);',
+                'private static boolean handleMouseClick(Screen screen, double mouseX, double mouseY, int button) {\n        if (button != 0) return true;\n        int mx = (int) mouseX;\n        int my = (int) mouseY;',
+                c
+            )
             c = c.replace('guiGraphics.blit(texture, artX, artY, artX + artSize, artY + artSize, 0.0f, 1.0f, 0.0f, 1.0f);', 'guiGraphics.blit(texture, artX, artY, 0, 0, artSize, artSize, artSize, artSize);')
 
         if 'SpotifyScreen' in rel or 'HudEditorScreen' in rel:
@@ -179,9 +184,7 @@ def build_mc120():
             c = c.replace('import com.mojang.blaze3d.vertex.ByteBufferBuilder;\n', '')
             c = c.replace('private static final ByteBufferBuilder BYTE_BUFFER_BUILDER = new ByteBufferBuilder(256 * 1024);\n', '')
             c = c.replace('private static final MultiBufferSource.BufferSource DEDICATED_BUFFER_SOURCE = MultiBufferSource.immediate(BYTE_BUFFER_BUILDER);',
-                          'private static MultiBufferSource.BufferSource getBufferSource() { return Minecraft.getInstance().renderBuffers().bufferSource(); }')
-            c = c.replace('DEDICATED_BUFFER_SOURCE.endBatch();', 'getBufferSource().endBatch();')
-            c = c.replace('DEDICATED_BUFFER_SOURCE', 'getBufferSource()')
+                          'private static final MultiBufferSource.BufferSource DEDICATED_BUFFER_SOURCE = MultiBufferSource.immediate(new com.mojang.blaze3d.vertex.BufferBuilder(256 * 1024));')
 
         if 'SpotifyScreen' in rel:
             c = c.replace('public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {',
