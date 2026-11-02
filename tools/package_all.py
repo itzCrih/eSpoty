@@ -8,7 +8,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.19.4",
         "base": "build/bases/base-1.19.4.jar",
-        "jar_name": "espoty-2.3.1-mc1.19.4.jar",
+        "jar_name": "espoty-2.3.2-mc1.19.4.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "A"
@@ -17,7 +17,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20",
         "base": "build/bases/base-1.20.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "B"
@@ -25,7 +25,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.1",
         "base": "build/bases/base-1.20.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.1.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.1.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "B"
@@ -33,7 +33,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.2",
         "base": "build/bases/base-1.20.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.2.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.2.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "B"
@@ -41,7 +41,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.3",
         "base": "build/bases/base-1.20.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.3.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.3.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "B"
@@ -49,7 +49,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.4",
         "base": "build/bases/base-1.20.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.4.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.4.jar",
         "java_dep": ">=17",
         "loader_dep": ">=0.15.0",
         "group": "B"
@@ -58,7 +58,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.5",
         "base": "build/bases/base-1.21.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.5.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.5.jar",
         "java_dep": ">=21",
         "loader_dep": ">=0.15.0",
         "group": "C"
@@ -66,7 +66,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.20.6",
         "base": "build/bases/base-1.21.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.20.6.jar",
+        "jar_name": "espoty-2.3.2-mc1.20.6.jar",
         "java_dep": ">=21",
         "loader_dep": ">=0.15.0",
         "group": "C"
@@ -75,7 +75,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.21",
         "base": "build/bases/base-1.21.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.21.jar",
+        "jar_name": "espoty-2.3.2-mc1.21.jar",
         "java_dep": ">=21",
         "loader_dep": ">=0.15.0",
         "group": "D"
@@ -83,7 +83,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.21.1",
         "base": "build/bases/base-1.21.1.jar",
-        "jar_name": "espoty-2.3.1-mc1.21.1.jar",
+        "jar_name": "espoty-2.3.2-mc1.21.1.jar",
         "java_dep": ">=21",
         "loader_dep": ">=0.15.0",
         "group": "D"
@@ -92,7 +92,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "26.1",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc26.1.jar",
+        "jar_name": "espoty-2.3.2-mc26.1.jar",
         "java_dep": ">=25",
         "loader_dep": ">=0.16.0",
         "group": "E"
@@ -100,7 +100,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "26.1.1",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc26.1.1.jar",
+        "jar_name": "espoty-2.3.2-mc26.1.1.jar",
         "java_dep": ">=25",
         "loader_dep": ">=0.16.0",
         "group": "E"
@@ -108,7 +108,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "26.1.2",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc26.1.2.jar",
+        "jar_name": "espoty-2.3.2-mc26.1.2.jar",
         "java_dep": ">=25",
         "loader_dep": ">=0.16.0",
         "group": "E"
@@ -116,7 +116,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "26.2",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc26.2.jar",
+        "jar_name": "espoty-2.3.2-mc26.2.jar",
         "java_dep": ">=25",
         "loader_dep": ">=0.16.0",
         "group": "E"
@@ -124,7 +124,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "26.3",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc26.3.jar",
+        "jar_name": "espoty-2.3.2-mc26.3.jar",
         "java_dep": ">=25",
         "loader_dep": ">=0.16.0",
         "group": "E"
@@ -133,7 +133,7 @@ TARGET_VERSIONS = [
     {
         "mc_ver": "1.21.11",
         "base": "build/bases/base-modern.jar",
-        "jar_name": "espoty-2.3.1-mc1.21.11.jar",
+        "jar_name": "espoty-2.3.2-mc1.21.11.jar",
         "java_dep": ">=21",
         "loader_dep": ">=0.16.0",
         "group": "Baseline"
@@ -170,9 +170,9 @@ def package_all():
         size_kb = os.path.getsize(target_path) / 1024
         print(f"[Group {item['group']:<8}] MC {item['mc_ver']:<7} -> {item['jar_name']:<30} ({size_kb:,.1f} KB)")
 
-    # Also ensure default espoty-2.3.1.jar is identical to baseline 1.21.11
-    shutil.copy2(os.path.join(out_dir, "espoty-2.3.1-mc1.21.11.jar"), os.path.join(out_dir, "espoty-2.3.1.jar"))
-    print(f"Default jar espoty-2.3.1.jar created from baseline 1.21.11.")
+    # Also ensure default espoty-2.3.2.jar is identical to baseline 1.21.11
+    shutil.copy2(os.path.join(out_dir, "espoty-2.3.2-mc1.21.11.jar"), os.path.join(out_dir, "espoty-2.3.2.jar"))
+    print(f"Default jar espoty-2.3.2.jar created from baseline 1.21.11.")
     print("=" * 80)
 
 def verify_all():
